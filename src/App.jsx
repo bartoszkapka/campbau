@@ -154,6 +154,12 @@ const GlobalStyles = () => (
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
 
+    /* Monochrome map — Google Maps embed gets desaturated to match aesthetic.
+       Filter is applied to the rendered output (cross-origin iframe is fine). */
+    .map-iframe {
+      filter: grayscale(1) contrast(1.05);
+    }
+
     /* Render colored emojis as monochrome — best effort with grayscale + contrast.
        Use font-variant-emoji where supported (modern Chrome/Firefox) for crisper text-style. */
     .emoji-mono {
@@ -362,6 +368,8 @@ const seedDemoData = async () => {
         mapQuery: "Grójec, Polska",
         lat: 51.8667,
         lng: 20.8667,
+        startDate: "2026-06-19",
+        endDate: "2026-06-21",
         contact: "**bau** (gospodarz): 600 000 000\nEmail: bau@campbau.pl\n\nDojazd: najlepiej samochodem. Z Warszawy ~1h.\nPKP: stacja Grójec + 15 min pieszo."
       });
     }
@@ -1029,7 +1037,7 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
       </div>
       <div ref={scrollRef}
         className="overflow-x-auto no-scrollbar"
-        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
         <div className="flex gap-3" style={{ width: "max-content" }}>
           {events.map((e, i) => (
             <div key={i}
@@ -1491,8 +1499,8 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
       </div>
       <div className="mx-5 border-t border-black pt-5 mb-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display font-bold uppercase">Organizatorzy ({owners.length}/36)</h2>
-          {canEdit && owners.length < 36 && (
+          <h2 className="font-display font-bold uppercase">Organizatorzy ({owners.length})</h2>
+          {canEdit && (
             <Button variant="outline" size="sm" onClick={() => setCoOwnerOpen(true)}>+ Dodaj</Button>
           )}
         </div>
@@ -1659,7 +1667,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
         <div className="mb-6">
           <div ref={calendarRef}
             className="overflow-x-auto no-scrollbar px-5"
-            style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
+            style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
             <div className="flex gap-2" style={{ width: "max-content" }}>
               {dateKeys.map(dateStr => {
                 const isSelected = dateStr === selectedDate;
@@ -2134,7 +2142,7 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
 // MIEJSCE VIEW
 // ============================================================
 const MiejsceView = ({ user }) => {
-  const [data, setData] = useState({ photos: [], address: "", mapQuery: "", contact: "", lat: null, lng: null });
+  const [data, setData] = useState({ photos: [], address: "", mapQuery: "", contact: "", lat: null, lng: null, startDate: "", endDate: "" });
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const isAdmin = user.role === "admin";
@@ -2147,6 +2155,8 @@ const MiejsceView = ({ user }) => {
       mapQuery: d.mapQuery || "", contact: d.contact || "",
       lat: typeof d.lat === "number" ? d.lat : null,
       lng: typeof d.lng === "number" ? d.lng : null,
+      startDate: d.startDate || "",
+      endDate: d.endDate || "",
     });
     setLoading(false);
   };
@@ -2158,15 +2168,33 @@ const MiejsceView = ({ user }) => {
     setEditOpen(false);
   };
 
-  const mapSrc = data.mapQuery
-    ? `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent("")}&layer=mapnik&marker=`
-    : null;
-
   // Build OSM embed URL from query: use search-based link
   const mapEmbedUrl = data.mapQuery
     ? `https://www.google.com/maps?q=${encodeURIComponent(data.mapQuery)}&output=embed`
     : null;
   const mapLinkUrl = data.mapQuery ? `https://www.google.com/maps?q=${encodeURIComponent(data.mapQuery)}` : null;
+
+  // Festival dates display
+  const fmtDate = (s) => {
+    if (!s) return "";
+    return new Date(s + "T12:00").toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" });
+  };
+  const fmtRange = () => {
+    if (!data.startDate && !data.endDate) return null;
+    if (data.startDate && data.endDate && data.startDate === data.endDate) return fmtDate(data.startDate);
+    if (data.startDate && data.endDate) {
+      const a = new Date(data.startDate + "T12:00");
+      const b = new Date(data.endDate + "T12:00");
+      const sameYear = a.getFullYear() === b.getFullYear();
+      const sameMonth = sameYear && a.getMonth() === b.getMonth();
+      if (sameMonth) {
+        return `${a.getDate()}–${b.getDate()} ${a.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })}`;
+      }
+      return `${fmtDate(data.startDate)} – ${fmtDate(data.endDate)}`;
+    }
+    return fmtDate(data.startDate || data.endDate);
+  };
+  const dateRangeText = fmtRange();
 
   return (
     <div className="pb-20">
@@ -2175,6 +2203,12 @@ const MiejsceView = ({ user }) => {
       {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
         : (
           <div className="px-5 space-y-6">
+            {dateRangeText && (
+              <Card className="p-5">
+                <div className="font-mono text-xs uppercase tracking-widest mb-2 opacity-70">Kiedy</div>
+                <div className="font-display text-2xl">{dateRangeText}</div>
+              </Card>
+            )}
             {data.photos.length > 0 && (
               <div className="grid grid-cols-2 gap-3">
                 {data.photos.map((p, i) => (
@@ -2192,7 +2226,9 @@ const MiejsceView = ({ user }) => {
             )}
             {mapEmbedUrl && (
               <div className="border border-black overflow-hidden">
-                <iframe src={mapEmbedUrl} className="w-full h-72 block" title="Map" loading="lazy" />
+                <div className="map-container">
+                  <iframe src={mapEmbedUrl} className="w-full h-72 block map-iframe" title="Map" loading="lazy" />
+                </div>
                 <a href={mapLinkUrl} target="_blank" rel="noopener noreferrer"
                   className="block border-t border-black px-4 py-3 font-mono text-xs uppercase tracking-widest hover:bg-black hover:text-white">
                   Otwórz w mapach →
@@ -2205,7 +2241,7 @@ const MiejsceView = ({ user }) => {
                 <div className="prose-simple text-base">{renderRichText(data.contact)}</div>
               </Card>
             )}
-            {!data.photos.length && !data.address && !data.contact && !mapEmbedUrl && (
+            {!data.photos.length && !data.address && !data.contact && !mapEmbedUrl && !dateRangeText && (
               <EmptyState message={isAdmin ? "Dodaj informacje o miejscu" : "Brak informacji"} />
             )}
           </div>
@@ -2216,7 +2252,7 @@ const MiejsceView = ({ user }) => {
 };
 
 const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
-  const [form, setForm] = useState({ photos: [], address: "", mapQuery: "", contact: "", lat: null, lng: null });
+  const [form, setForm] = useState({ photos: [], address: "", mapQuery: "", contact: "", lat: null, lng: null, startDate: "", endDate: "" });
   const photoInputRef = useRef();
   const [uploading, setUploading] = useState(false);
   useEffect(() => { if (open) setForm({ ...data }); }, [open, data]);
@@ -2241,11 +2277,26 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
     return isNaN(n) ? null : n;
   };
 
-  const submit = (e) => { e.preventDefault(); onSave(form); };
+  const submit = (e) => {
+    e.preventDefault();
+    if (form.startDate && form.endDate && form.startDate > form.endDate) {
+      alert("Data zakończenia musi być po dacie rozpoczęcia.");
+      return;
+    }
+    onSave(form);
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Edytuj informacje" maxWidth="max-w-xl">
       <form onSubmit={submit} className="space-y-4">
+        {/* Festival date range */}
+        <div>
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Daty festiwalu</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Od" type="date" value={form.startDate || ""} onChange={e => update("startDate", e.target.value)} />
+            <Input label="Do" type="date" value={form.endDate || ""} onChange={e => update("endDate", e.target.value)} />
+          </div>
+        </div>
         <div>
           <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Zdjęcia</span>
           <div className="grid grid-cols-3 gap-2 mb-2">
@@ -2292,12 +2343,57 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
 const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onToggleTheme }) => {
   const [form, setForm] = useState({
     firstName: user.firstName || "", lastName: user.lastName || "",
-    username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null
+    username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null,
+    attendance: user.attendance || {}
   });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [festivalDates, setFestivalDates] = useState({ startDate: "", endDate: "" });
+
+  // Load festival date range from miejsce record
+  useEffect(() => {
+    storage.get("miejsce").then(m => {
+      if (m && (m.startDate || m.endDate)) {
+        setFestivalDates({ startDate: m.startDate || "", endDate: m.endDate || "" });
+      }
+    });
+  }, []);
+
+  // Generate list of dates from startDate to endDate (inclusive)
+  const festivalDays = (() => {
+    const { startDate, endDate } = festivalDates;
+    if (!startDate || !endDate) return [];
+    const days = [];
+    const start = new Date(startDate + "T12:00");
+    const end = new Date(endDate + "T12:00");
+    if (start > end) return [];
+    const cur = new Date(start);
+    let safety = 0;
+    while (cur <= end && safety < 100) {
+      days.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+      safety++;
+    }
+    return days;
+  })();
 
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const setAttendance = (date, value) => {
+    setForm(prev => {
+      const next = { ...(prev.attendance || {}) };
+      // Clicking the already-selected option clears it
+      if (next[date] === value) delete next[date];
+      else next[date] = value;
+      return { ...prev, attendance: next };
+    });
+  };
+
+  const fmtDayLabel = (dStr) => {
+    const d = new Date(dStr + "T12:00");
+    const weekday = d.toLocaleDateString("pl-PL", { weekday: "long" });
+    const date = d.toLocaleDateString("pl-PL", { day: "numeric", month: "long" });
+    return { weekday, date };
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -2307,6 +2403,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onTogg
     updated.firstName = form.firstName.trim();
     updated.lastName = form.lastName.trim();
     updated.profilePicture = form.profilePicture;
+    updated.attendance = form.attendance || {};
 
     // Username change
     const newUsername = form.username.trim().toLowerCase();
@@ -2378,6 +2475,43 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onTogg
           </div>
           <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Ustawienia są zapisywane na tym urządzeniu.</p>
         </div>
+        {festivalDays.length > 0 && (
+          <div className="border-t border-black pt-5 space-y-3">
+            <div className="font-mono text-xs uppercase tracking-widest opacity-70">Obecność</div>
+            <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Zaznacz, w które dni będziesz na festiwalu.</p>
+            <div className="space-y-2">
+              {festivalDays.map(day => {
+                const status = form.attendance?.[day];
+                const { weekday, date } = fmtDayLabel(day);
+                const opts = [
+                  { value: "yes", label: "✓ Tak" },
+                  { value: "maybe", label: "? Może" },
+                  { value: "no", label: "✗ Nie" },
+                ];
+                return (
+                  <div key={day} className="border border-black p-3">
+                    <div className="flex items-baseline justify-between gap-2 mb-2">
+                      <div className="font-display text-sm capitalize">{weekday}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{date}</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {opts.map(o => {
+                        const selected = status === o.value;
+                        return (
+                          <button key={o.value} type="button"
+                            onClick={() => setAttendance(day, o.value)}
+                            className={`font-display text-xs py-2 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="border-t border-black pt-5 space-y-4">
           <div className="font-mono text-xs uppercase tracking-widest opacity-70">Zmień hasło</div>
           <Input label="Obecne hasło" type="password" value={form.password} onChange={e => update("password", e.target.value)} autoComplete="current-password" />

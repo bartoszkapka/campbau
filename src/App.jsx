@@ -145,9 +145,10 @@ const GlobalStyles = () => (
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
 
-    /* Sticky chrome backdrop — solid white when bars become pinned. */
+    /* Sticky chrome — solid opaque white when bars become pinned. */
     .sticky-bar {
-      background: #ffffff;
+      background-color: #ffffff !important;
+      box-shadow: 0 1px 0 rgba(13, 13, 13, 0.08), 0 4px 12px -8px rgba(13, 13, 13, 0.18);
     }
 
     /* Monochrome map — Google Maps embed gets desaturated to match aesthetic.
@@ -1630,7 +1631,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
       // Admin can set date/time directly. Non-admin owners can only suggest.
       date: (isAdmin && form.hasDate) ? (form.date || null) : (editing?.date || null),
       time: (isAdmin && form.hasDate) ? (form.time || null) : (editing?.time || null),
-      visibility: isAdmin ? form.visibility : (editing?.visibility || "public"),
+      visibility: form.visibility,
       icon: form.icon.trim() || null,
       hasDate: isAdmin ? form.hasDate : (editing?.hasDate ?? !!editing?.date),
       dateSuggestion: form.hasDate ? (form.dateSuggestion.trim() || "") : ""
@@ -1686,28 +1687,26 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
           </>
         )}
 
-        {/* Visibility — admin only */}
-        {isAdmin && (
-          <div>
-            <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Widoczność</span>
-            <div className="space-y-2">
-              {[
-                { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
-                { value: "hidden", title: "Ukryta", desc: "Widoczna jako sekret — szczegóły zna tylko organizator" },
-                { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna tylko dla adminów i organizatorów" },
-              ].map(opt => {
-                const selected = form.visibility === opt.value;
-                return (
-                  <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
-                    className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-                    <div className="font-display text-sm">{opt.title}</div>
-                    <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
+        {/* Visibility — selectable by admin and owners */}
+        <div>
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Widoczność</span>
+          <div className="space-y-2">
+            {[
+              { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
+              { value: "hidden", title: "Ukryta", desc: "Widoczna jako sekret — szczegóły zna tylko organizator" },
+              { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna tylko dla adminów i organizatorów" },
+            ].map(opt => {
+              const selected = form.visibility === opt.value;
+              return (
+                <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
+                  className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                  <div className="font-display text-sm">{opt.title}</div>
+                  <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>

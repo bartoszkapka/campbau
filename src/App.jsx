@@ -57,12 +57,12 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(40px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 14s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 17s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 13s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 15s ease-in-out infinite alternate; }
-    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 18s ease-in-out infinite alternate; }
-    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 14s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 10.5s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 12.75s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 9.75s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 11.25s ease-in-out infinite alternate; }
+    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 13.5s ease-in-out infinite alternate; }
+    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 10.5s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -491,6 +491,23 @@ const Card = ({ children, className = "", onClick }) => (
   </div>
 );
 
+// Rectangular on/off switch — track is a black-bordered rectangle, the knob
+// is a filled square that slides between the two ends. Used everywhere a
+// boolean is being toggled (visibility flags, optional features, settings).
+const Switch = ({ checked, onChange, disabled = false, label, className = "" }) => (
+  <button type="button" role="switch" aria-checked={!!checked} aria-label={label}
+    onClick={() => !disabled && onChange?.(!checked)}
+    disabled={disabled}
+    className={`relative w-12 h-7 border border-black shrink-0 transition-colors ${
+      disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+    } ${checked ? "bg-black" : "bg-white"} ${className}`}>
+    <span aria-hidden
+      className={`absolute top-0.5 bottom-0.5 w-5 transition-all ${
+        checked ? "left-[calc(100%-1.375rem)] bg-white" : "left-0.5 bg-black"
+      }`} />
+  </button>
+);
+
 const Modal = ({ open, onClose, title, children, maxWidth = "max-w-lg" }) => {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
@@ -769,6 +786,26 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
           className={`hidden lg:inline-flex font-display text-xs px-4 py-2 border ${borderColor} shrink-0 transition-colors ${buttonHover}`}>
           Wyloguj
         </button>
+        {/* Desktop profile — rightmost, avatar + first name */}
+        {(() => {
+          const profileActive = currentView === "profile";
+          const initial = (user.firstName || user.username)[0]?.toUpperCase() || "?";
+          const displayName = user.firstName || user.username;
+          return (
+            <button onClick={() => onNavigate("profile")}
+              aria-label="Profil"
+              className={`hidden lg:inline-flex items-center gap-2 px-2 py-1 border shrink-0 transition-colors ${
+                profileActive ? activeBg : `${borderColor} ${buttonHover}`
+              }`}>
+              <span className={`w-8 h-8 border ${borderColor} overflow-hidden shrink-0 inline-flex items-center justify-center font-display text-sm`}>
+                {user.profilePicture
+                  ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                  : <span>{initial}</span>}
+              </span>
+              <span className="font-display text-xs max-w-[120px] truncate">{displayName}</span>
+            </button>
+          );
+        })()}
         {/* Mobile hamburger */}
         <button onClick={onMenuOpen}
           className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 ml-auto transition-colors ${buttonHover}`}
@@ -1409,10 +1446,10 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
             const icon = homeTilesOverrides[t.id] || t.icon;
             return (
               <button key={t.id} onClick={() => onNavigate(t.id)}
-                className="border border-black p-6 text-left hover:bg-black hover:text-white transition-colors group min-h-[160px] flex flex-col justify-between">
-                <div className="text-5xl leading-none mb-6 emoji-mono">{icon}</div>
-                <div>
-                  <div className="font-display text-lg mb-1">{t.title}</div>
+                className="border border-black p-4 text-left hover:bg-black hover:text-white transition-colors group min-h-[96px] flex items-center gap-4">
+                <div className="text-4xl leading-none shrink-0 emoji-mono">{icon}</div>
+                <div className="min-w-0">
+                  <div className="font-display text-lg mb-1 leading-tight">{t.title}</div>
                   <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
                 </div>
               </button>
@@ -1482,10 +1519,10 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
         action={<Button size="sm" onClick={() => setFormOpen(true)}>+ Dodaj</Button>} />
       {(intro || isAdmin) && (
         <div className="px-5 mb-6">
-          <div className="p-5 relative">
+          <div className="relative">
             {isAdmin && (
               <button onClick={() => setIntroOpen(true)}
-                className="absolute top-3 right-3 font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
+                className="absolute top-0 right-0 font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
                 Edytuj
               </button>
             )}
@@ -1615,7 +1652,9 @@ const StacjaCard = ({ item, users, mystery, onClick }) => {
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
           {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{dateLine}</span>}
         </div>
-        <h3 className="font-display text-lg mb-1 leading-tight">{item.title}</h3>
+        <h3 className="font-display text-lg mb-1 leading-tight">
+          {item.image && item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
+        </h3>
         {item.description && <p className="text-sm opacity-80 line-clamp-2 mb-2">{item.description}</p>}
         <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-auto">
           {ownerNames}{item.owners?.length > 3 && ` +${item.owners.length - 3}`}
@@ -1689,13 +1728,15 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
 
         {/* Date flag — anyone editing the stacja (admin or owner) can toggle this. */}
-        <button type="button" onClick={() => update("hasDate", !form.hasDate)}
-          className={`w-full text-left border px-4 py-3 transition-colors ${form.hasDate ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-          <div className="font-display text-sm">Z datą i godziną{form.hasDate && " — włączone"}</div>
-          <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.hasDate ? "opacity-80" : "opacity-60"}`}>
-            Stacja będzie miała wyznaczony termin
+        <div className="flex items-start gap-3 border border-black px-4 py-3">
+          <div className="flex-1 min-w-0">
+            <div className="font-display text-sm">Z datą i godziną</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest mt-1 opacity-60">
+              Stacja będzie miała wyznaczony termin
+            </div>
           </div>
-        </button>
+          <Switch checked={form.hasDate} onChange={v => update("hasDate", v)} label="Z datą i godziną" />
+        </div>
 
         {form.hasDate && (
           <>
@@ -1849,18 +1890,22 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
       <div className="px-5 pt-5">
         <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
       </div>
-      {item.image && (
+      {item.image ? (
         <div className="mt-5 mx-5 border border-black">
           <img src={item.image} alt="" className="w-full h-64 sm:h-80 object-cover block" />
         </div>
-      )}
+      ) : item.icon ? (
+        <div className="mt-5 mx-5 border border-black h-64 sm:h-80 flex items-center justify-center bg-black/5">
+          <span className="text-8xl sm:text-9xl emoji-mono">{item.icon}</span>
+        </div>
+      ) : null}
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
           {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{dateLine}</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
-          {item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
+          {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}{item.title}
         </h1>
         {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
       </div>
@@ -2119,10 +2164,14 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                     <Card key={it._type + ":" + it.id} className="overflow-hidden"
                       onClick={it._type === "stacja" ? () => onOpenStacja(it.id) : () => openEvent(it.id)}>
                       <div className="flex">
-                        {it.image && (
+                        {it.image ? (
                           <img src={it.image} alt=""
                             className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
-                        )}
+                        ) : it.icon ? (
+                          <div className="w-28 h-28 sm:w-40 sm:h-40 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
+                            <span className="text-5xl sm:text-6xl emoji-mono">{it.icon}</span>
+                          </div>
+                        ) : null}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
@@ -2132,7 +2181,9 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                           </div>
                           <div className="flex items-start justify-between gap-3 flex-1">
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
+                              <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">
+                                {it.image && it.icon && <span className="mr-2 emoji-mono">{it.icon}</span>}{it.title}
+                              </h3>
                               {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
                             </div>
                             {isAdmin && it._type === "event" && (
@@ -2156,14 +2207,20 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                   {eventsNoDate.map(it => (
                     <Card key={it.id} className="overflow-hidden" onClick={() => openEvent(it.id)}>
                       <div className="flex">
-                        {it.image && (
+                        {it.image ? (
                           <img src={it.image} alt=""
                             className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
-                        )}
+                        ) : it.icon ? (
+                          <div className="w-28 h-28 sm:w-40 sm:h-40 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
+                            <span className="text-5xl sm:text-6xl emoji-mono">{it.icon}</span>
+                          </div>
+                        ) : null}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2"><span className="emoji-mono">🚌</span> Kosmobus</span>}
-                            <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
+                            <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">
+                              {it.image && it.icon && <span className="mr-2 emoji-mono">{it.icon}</span>}{it.title}
+                            </h3>
                             {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
                           </div>
                           {isAdmin && (
@@ -2189,20 +2246,21 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
 
 const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
   const [form, setForm] = useState({
-    title: "", description: "", image: null, date: "", time: "",
+    title: "", description: "", image: null, icon: "", date: "", time: "",
     kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false,
     visibility: "public"
   });
   useEffect(() => {
     if (open) setForm(editing ? {
       title: editing.title || "", description: editing.description || "",
-      image: editing.image || null, date: editing.date || "", time: editing.time || "",
+      image: editing.image || null, icon: editing.icon || "",
+      date: editing.date || "", time: editing.time || "",
       kosmobusEnabled: !!editing.kosmobusEnabled,
       guestListEnabled: !!editing.guestListEnabled,
       transportNeeded: !!editing.transportNeeded,
       visibility: editing.visibility || "public"
     } : {
-      title: "", description: "", image: null, date: "", time: "",
+      title: "", description: "", image: null, icon: "", date: "", time: "",
       kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false,
       visibility: "public"
     });
@@ -2218,7 +2276,8 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
     if (!form.title.trim()) return;
     onSave({
       title: form.title.trim(), description: form.description.trim(),
-      image: form.image, date: form.date || null, time: form.time || null,
+      image: form.image, icon: form.icon.trim() || null,
+      date: form.date || null, time: form.time || null,
       kosmobusEnabled: form.kosmobusEnabled,
       guestListEnabled: form.guestListEnabled,
       transportNeeded: form.transportNeeded,
@@ -2226,25 +2285,32 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
     });
   };
 
-  // Reusable toggle button
-  const Toggle = ({ enabled, onClick, emoji, title, subtitle, disabled }) => (
-    <button type="button" onClick={onClick} disabled={disabled}
-      className={`w-full text-left border px-4 py-3 transition-colors ${
-        disabled ? "border-black/30 opacity-40 cursor-not-allowed" :
-        enabled ? "bg-black text-white border-black" : "border-black hover:bg-black/5"
-      }`}>
-      <div className="flex items-center gap-2">
-        {emoji && <span className="text-base emoji-mono">{emoji}</span>}
-        <span className="font-display text-sm">{title}{enabled && " — włączone"}</span>
+  // Toggle row — emoji + title + subtitle on the left, Switch on the right.
+  // Disabled state visually dims the row and locks the switch.
+  const ToggleRow = ({ checked, onChange, emoji, title, subtitle, disabled }) => (
+    <div className={`flex items-start gap-3 border border-black px-4 py-3 ${disabled ? "opacity-40" : ""}`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          {emoji && <span className="text-base emoji-mono">{emoji}</span>}
+          <span className="font-display text-sm">{title}</span>
+        </div>
+        {subtitle && <div className="font-mono text-[10px] uppercase tracking-widest mt-1 opacity-60">{subtitle}</div>}
       </div>
-      {subtitle && <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${enabled ? "opacity-80" : "opacity-60"}`}>{subtitle}</div>}
-    </button>
+      <Switch checked={checked} onChange={onChange} disabled={disabled} label={title} />
+    </div>
   );
 
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj wydarzenie" : "Nowe wydarzenie"}>
       <form onSubmit={submit} className="space-y-4">
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
+        <div>
+          <label className="block font-mono text-xs uppercase tracking-widest mb-1.5">Emoji (opcjonalne)</label>
+          <input type="text" value={form.icon}
+            onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8}
+            placeholder="np. 🎉"
+            className="w-20 h-12 border border-black px-2 text-center text-2xl bg-white" />
+        </div>
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2272,18 +2338,18 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
         </div>
         {/* Feature toggles */}
         <div className="border-t border-black pt-4 space-y-2">
-          <Toggle enabled={form.guestListEnabled}
-            onClick={() => update("guestListEnabled", !form.guestListEnabled)}
+          <ToggleRow checked={form.guestListEnabled}
+            onChange={v => update("guestListEnabled", v)}
             emoji="👥"
             title="Lista gości"
             subtitle="Goście mogą zapisywać się sami; admin zarządza listą" />
-          <Toggle enabled={form.transportNeeded}
-            onClick={() => update("transportNeeded", !form.transportNeeded)}
+          <ToggleRow checked={form.transportNeeded}
+            onChange={v => update("transportNeeded", v)}
             emoji="🚗"
             title="Potrzebny transport"
             subtitle="Włącza opcje transportu — Kosmobus i własne podwózki" />
-          <Toggle enabled={form.kosmobusEnabled}
-            onClick={() => update("kosmobusEnabled", !form.kosmobusEnabled)}
+          <ToggleRow checked={form.kosmobusEnabled}
+            onChange={v => update("kosmobusEnabled", v)}
             disabled={!form.transportNeeded}
             emoji="🚌"
             title="Kosmobus"
@@ -2487,11 +2553,15 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
       <div className="px-5 pt-5">
         <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
       </div>
-      {item.image && (
+      {item.image ? (
         <div className="mt-5 mx-5 border border-black">
           <img src={item.image} alt="" className="w-full h-64 sm:h-80 object-cover block" />
         </div>
-      )}
+      ) : item.icon ? (
+        <div className="mt-5 mx-5 border border-black h-64 sm:h-80 flex items-center justify-center bg-black/5">
+          <span className="text-8xl sm:text-9xl emoji-mono">{item.icon}</span>
+        </div>
+      ) : null}
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
@@ -2500,7 +2570,9 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
           {item.transportNeeded && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">🚗</span> Transport</span>}
           {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">{item.title}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
+          {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}{item.title}
+        </h1>
         {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
       </div>
 
@@ -3533,10 +3605,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
                 {animated ? "Włączone" : "Wyłączone"}
               </div>
             </div>
-            <button type="button" onClick={onToggleAnimated}
-              className="font-display text-xs px-4 py-2 border border-black hover:bg-black hover:text-white shrink-0">
-              {animated ? "Wyłącz" : "Włącz"}
-            </button>
+            <Switch checked={animated} onChange={onToggleAnimated} label="Animowane tło" />
           </div>
           <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
             Ustawienie zapisywane na tym urządzeniu.
@@ -3708,9 +3777,7 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
                 {guestListVisible ? "Widoczna dla wszystkich" : "Widoczna tylko dla adminów"}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={onToggleGuestList}>
-              {guestListVisible ? "Ukryj" : "Pokaż"}
-            </Button>
+            <Switch checked={guestListVisible} onChange={onToggleGuestList} label="Lista gości" />
           </div>
         </Card>
         <Card className="p-5">
@@ -3721,9 +3788,7 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
                 {stacjeListVisible ? "Widoczna dla wszystkich" : "Ukryta — widoczny tylko opis"}
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={onToggleStacjeList}>
-              {stacjeListVisible ? "Ukryj" : "Pokaż"}
-            </Button>
+            <Switch checked={stacjeListVisible} onChange={onToggleStacjeList} label="Lista stacji kosmicznych" />
           </div>
         </Card>
         <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />

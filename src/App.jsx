@@ -305,20 +305,6 @@ const seedDemoData = async () => {
       }
     }
 
-    // Cnoty kosmiczne
-    const cnoty = [
-      { title: "Ciekawość", description: "Zadawaj pytania. Dziw się światu. Otwórz się na to, czego jeszcze nie rozumiesz — tam zaczyna się podróż." },
-      { title: "Otwartość", description: "Spotkaj drugą osobę bez z góry przygotowanej odpowiedzi. Pozwól, żeby zaskoczyła cię inaczej, niż się spodziewasz." },
-      { title: "Wspólnota", description: "Tu nie ma widzów. Każdy z nas współtworzy to miejsce.\n\n**Dbaj o innych tak, jak chciałbyś, żeby dbano o ciebie.**" },
-      { title: "Zachwyt", description: "Nie zapominaj podnosić głowy. Nocne niebo, poranna mgła, nagły śmiech przyjaciela — to wszystko jest festiwalem." },
-      { title: "Hojność", description: "Podziel się jedzeniem, czasem, uwagą. Najlepsze rzeczy dzieją się wtedy, gdy dajemy więcej, niż musimy." },
-      { title: "Obecność", description: "Schowaj telefon. Bądź tu, gdzie jesteś. *To wszystko dzieje się tylko teraz — i tylko raz.*" },
-    ];
-    for (let i = 0; i < cnoty.length; i++) {
-      const id = "seed-cnota-" + i;
-      await storage.set("cnota:" + id, { id, order: i, ...cnoty[i] });
-    }
-
     // Stacje kosmiczne
     const stacje = [
       { sid: "seed-s1", title: "Strefa Chill", description: "Poduchy, koce, cisza. Miejsce, żeby zwolnić między wydarzeniami. Zagaduj innych tylko wtedy, gdy wyraźnie mają na to ochotę.", visibility: "public", owners: ["ania"], createdBy: "ania" },
@@ -646,9 +632,8 @@ const NAV_ITEMS = [
   { id: "home", label: "Start" },
   { id: "wydarzenia", label: "Wydarzenia" },
   { id: "stacje", label: "Stacje kosmiczne" },
-  { id: "cnoty", label: "Cnoty kosmiczne" },
   { id: "festiwal", label: "O Festiwalu" },
-  { id: "miejsce", label: "Miejsce" },
+  { id: "miejsce", label: "Gdzie i kiedy" },
   { id: "profile", label: "Profil", drawerFooter: true },
   { id: "goscie", label: "Goście" },
   { id: "admin", label: "Admin", adminOnly: true },
@@ -694,7 +679,9 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
         {/* Inline nav — lg and up */}
         <nav className="hidden lg:flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar">
           {items.map(it => {
-            const active = currentView === it.id || (currentView === "stacja-detail" && it.id === "stacje");
+            const active = currentView === it.id ||
+              (currentView === "stacja-detail" && it.id === "stacje") ||
+              (currentView === "wydarzenie-detail" && it.id === "wydarzenia");
             return (
               <button key={it.id} onClick={() => onNavigate(it.id)}
                 className={`font-display text-xs px-3 py-2 border transition-colors shrink-0 ${active ? activeBg : `border-transparent ${navHoverBorder}`}`}>
@@ -809,9 +796,8 @@ const EmptyState = ({ message }) => (
 const HOME_TILES = [
   { id: "wydarzenia", symbol: "☽", title: "Wydarzenia", desc: "Plan festiwalu chronologicznie" },
   { id: "stacje", symbol: "◉", title: "Stacje kosmiczne", desc: "Aktywności uczestników" },
-  { id: "cnoty", symbol: "✧", title: "Cnoty kosmiczne", desc: "Nasze zasady wspólnoty" },
   { id: "festiwal", symbol: "☄", title: "O Festiwalu", desc: "Koncept, zasady, FAQ" },
-  { id: "miejsce", symbol: "▲", title: "Miejsce", desc: "Gdzie i jak dojechać" },
+  { id: "miejsce", symbol: "▲", title: "Gdzie i kiedy", desc: "Lokalizacja, dojazd, kontakt" },
   { id: "profile", symbol: "◊", title: "Profil", desc: "Twoje konto i zdjęcie" },
   { id: "goscie", symbol: "❋", title: "Goście", desc: "Lista uczestników", conditional: "guests" },
   { id: "admin", symbol: "✺", title: "Admin", desc: "Zarządzanie aplikacją", conditional: "admin" },
@@ -990,10 +976,13 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
     { icon: "☾", type: "Noc",      name: "dołowanie",     date: data.solarMidnight },
   ];
 
-  // Index of current/next event — for highlight AND auto-scroll target
+  // Index of LAST event that has already happened (current solar phase)
   const nowMs = now.getTime();
-  let activeIdx = events.findIndex(e => e.date && e.date.getTime() > nowMs);
-  if (activeIdx === -1) activeIdx = events.length - 1; // past last event of today
+  let activeIdx = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].date && events[i].date.getTime() <= nowMs) { activeIdx = i; break; }
+  }
+  if (activeIdx === -1) activeIdx = 0; // before first event of today (very early morning)
 
   // Auto-scroll to active event tile after first paint
   useEffect(() => {
@@ -1038,12 +1027,12 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
           {events.map((e, i) => (
             <div key={i}
               ref={(el) => { tilesRef.current[i] = el; }}
-              className={`border border-black p-3 w-32 shrink-0 flex flex-col h-32 transition-colors ${i === activeIdx ? "bg-black text-white" : ""}`}>
-              <div className="text-2xl leading-none">{e.icon}</div>
+              className={`border border-black p-2.5 w-28 shrink-0 flex flex-col h-28 transition-colors ${i === activeIdx ? "bg-black text-white" : ""}`}>
+              <div className="text-xl leading-none">{e.icon}</div>
               <div className="mt-auto">
                 <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{e.type}</div>
                 <div className="text-xs leading-tight mt-0.5 truncate">{e.name}</div>
-                <div className="font-display text-lg mt-1.5 leading-none">{fmtTime(e.date)}</div>
+                <div className="font-display text-base mt-1 leading-none">{fmtTime(e.date)}</div>
               </div>
             </div>
           ))}
@@ -1105,107 +1094,25 @@ const ThemeToggle = ({ theme, onToggle, className = "" }) => (
   </button>
 );
 
-// ============================================================
-// CNOTY KOSMICZNE VIEW
-// ============================================================
-const CnotyView = ({ user }) => {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const isAdmin = user.role === "admin";
-
-  const load = async () => {
-    setLoading(true);
-    const list = await storage.getAll("cnota:");
-    list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    setItems(list);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
-
-  const save = async (data) => {
-    const item = editing
-      ? { ...editing, ...data }
-      : { id: uid(), order: items.length, ...data };
-    await storage.set("cnota:" + item.id, item);
-    setModalOpen(false); setEditing(null);
-    load();
-  };
-  const remove = async (id) => {
-    if (!confirm("Usunąć tę cnotę?")) return;
-    await storage.delete("cnota:" + id);
-    load();
-  };
-
-  return (
-    <div className="pb-20">
-      <PageHeader title="Cnoty kosmiczne"
-        subtitle={`${items.length} ${items.length === 1 ? "cnota" : "cnót"}`}
-        action={isAdmin && <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Dodaj</Button>} />
-      {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
-        : items.length === 0 ? <EmptyState message="Brak cnót" />
-        : (
-          <div className="px-5 space-y-4">
-            {items.map((it, idx) => (
-              <Card key={it.id} className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="font-mono text-xs opacity-60 mb-1">{String(idx + 1).padStart(2, "0")}</div>
-                    <h3 className="font-display text-xl font-bold uppercase mb-2">{it.title}</h3>
-                    <div className="prose-simple text-sm">{renderRichText(it.description)}</div>
-                  </div>
-                  {isAdmin && (
-                    <div className="flex flex-col gap-2 shrink-0">
-                      <Button variant="outline" size="sm" onClick={() => { setEditing(it); setModalOpen(true); }}>Edytuj</Button>
-                      <Button variant="outline" size="sm" onClick={() => remove(it.id)}>Usuń</Button>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      <CnotaEditModal open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }}
-        editing={editing} onSave={save} />
-    </div>
-  );
-};
-
-const CnotaEditModal = ({ open, onClose, editing, onSave }) => {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  useEffect(() => {
-    if (open) { setTitle(editing?.title || ""); setDescription(editing?.description || ""); }
-  }, [open, editing]);
-  const submit = (e) => { e.preventDefault(); if (!title.trim()) return; onSave({ title: title.trim(), description: description.trim() }); };
-  return (
-    <Modal open={open} onClose={onClose} title={editing ? "Edytuj cnotę" : "Dodaj cnotę"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Input label="Tytuł" value={title} onChange={(e) => setTitle(e.target.value)} required />
-        <Textarea label="Opis" value={description} onChange={(e) => setDescription(e.target.value)} rows={5} />
-        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, nowe akapity przez pustą linię</p>
-        <div className="flex gap-3">
-          <Button type="submit" className="flex-1">Zapisz</Button>
-          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
-        </div>
-      </form>
-    </Modal>
-  );
-};
 
 // ============================================================
 // STACJE KOSMICZNE VIEW
 // ============================================================
 const StacjeView = ({ user, users, onOpenDetail }) => {
   const [items, setItems] = useState([]);
+  const [intro, setIntro] = useState("");
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
   const isAdmin = user.role === "admin";
 
   const load = async () => {
     setLoading(true);
-    const all = await storage.getAll("stacja:");
+    const [all, introData] = await Promise.all([
+      storage.getAll("stacja:"),
+      storage.get("stacje_intro")
+    ]);
+    setIntro(introData?.text || "");
     // filter by visibility
     const visible = all.filter(s => {
       if (s.visibility === "public") return true;
@@ -1230,11 +1137,36 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
     load();
   };
 
+  const saveIntro = async (text) => {
+    await storage.set("stacje_intro", { text });
+    setIntro(text);
+    setIntroOpen(false);
+  };
+
   return (
     <div className="pb-20">
       <PageHeader title="Stacje kosmiczne"
         subtitle={`${items.length} ${items.length === 1 ? "stacja" : items.length > 4 ? "stacji" : "stacje"}`}
         action={<Button size="sm" onClick={() => setFormOpen(true)}>+ Dodaj</Button>} />
+      {(intro || isAdmin) && (
+        <div className="px-5 mb-6">
+          <div className="border border-black p-5 relative">
+            {isAdmin && (
+              <button onClick={() => setIntroOpen(true)}
+                className="absolute top-3 right-3 font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
+                Edytuj
+              </button>
+            )}
+            {intro ? (
+              <div className="prose-simple text-sm pr-20">{renderRichText(intro)}</div>
+            ) : (
+              <div className="font-mono text-xs uppercase tracking-widest opacity-60 pr-20">
+                Brak opisu — kliknij "Edytuj" by dodać.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
         : items.length === 0 ? <EmptyState message="Brak stacji" />
         : (
@@ -1245,7 +1177,26 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
           </div>
         )}
       <StacjaFormModal open={formOpen} onClose={() => setFormOpen(false)} onSave={save} />
+      <StacjeIntroModal open={introOpen} onClose={() => setIntroOpen(false)} initial={intro} onSave={saveIntro} />
     </div>
+  );
+};
+
+const StacjeIntroModal = ({ open, onClose, initial, onSave }) => {
+  const [text, setText] = useState("");
+  useEffect(() => { if (open) setText(initial || ""); }, [open, initial]);
+  const submit = (e) => { e.preventDefault(); onSave(text.trim()); };
+  return (
+    <Modal open={open} onClose={onClose} title="Edytuj wstęp">
+      <form onSubmit={submit} className="space-y-4">
+        <Textarea label="Tekst wstępu" value={text} onChange={e => setText(e.target.value)} rows={6} />
+        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <div className="flex gap-3">
+          <Button type="submit" className="flex-1">Zapisz</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 
@@ -1305,15 +1256,29 @@ const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Data (opcjonalna)" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
           <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
         </div>
-        <Select label="Widoczność" value={form.visibility} onChange={e => update("visibility", e.target.value)}>
-          <option value="public">Publiczna — widoczna dla wszystkich</option>
-          <option value="hidden">Ukryta — tylko dla współwłaścicieli</option>
-          <option value="host">Tylko host — widoczna dla adminów</option>
-        </Select>
+        <div>
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Widoczność</span>
+          <div className="space-y-2">
+            {[
+              { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
+              { value: "hidden", title: "Ukryta", desc: "Tylko dla organizatorów" },
+              { value: "host", title: "Tylko host", desc: "Widoczna dla adminów" },
+            ].map(opt => {
+              const selected = form.visibility === opt.value;
+              return (
+                <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
+                  className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                  <div className="font-display text-sm">{opt.title}</div>
+                  <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -1369,7 +1334,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
 
   const addCoOwner = async (userId) => {
     if (item.owners.includes(userId)) return;
-    if (item.owners.length >= 36) { alert("Maksymalnie 36 współwłaścicieli."); return; }
+    if (item.owners.length >= 36) { alert("Maksymalnie 36 organizatorów."); return; }
     const updated = { ...item, owners: [...item.owners, userId] };
     await storage.set("stacja:" + item.id, updated);
     setItem(updated);
@@ -1378,7 +1343,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
 
   const removeCoOwner = async (userId) => {
     if (item.owners.length <= 1) { alert("Musi być co najmniej jeden właściciel."); return; }
-    if (!confirm("Usunąć tego współwłaściciela?")) return;
+    if (!confirm("Usunąć tego organizatora?")) return;
     const updated = { ...item, owners: item.owners.filter(id => id !== userId) };
     await storage.set("stacja:" + item.id, updated);
     setItem(updated);
@@ -1407,7 +1372,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
       </div>
       <div className="mx-5 border-t border-black pt-5 mb-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display font-bold uppercase">Właściciele ({owners.length}/36)</h2>
+          <h2 className="font-display font-bold uppercase">Organizatorzy ({owners.length}/36)</h2>
           {canEdit && owners.length < 36 && (
             <Button variant="outline" size="sm" onClick={() => setCoOwnerOpen(true)}>+ Dodaj</Button>
           )}
@@ -1438,7 +1403,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
         </div>
       )}
       <StacjaFormModal open={editOpen} onClose={() => setEditOpen(false)} onSave={saveEdit} editing={item} />
-      <Modal open={coOwnerOpen} onClose={() => setCoOwnerOpen(false)} title="Dodaj współwłaściciela">
+      <Modal open={coOwnerOpen} onClose={() => setCoOwnerOpen(false)} title="Dodaj organizatora">
         {availableUsers.length === 0
           ? <p className="font-mono text-xs uppercase tracking-widest opacity-60">Brak dostępnych użytkowników</p>
           : (
@@ -1474,6 +1439,8 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const isAdmin = user.role === "admin";
+  const routerNavigate = useNavigate();
+  const openEvent = (id) => routerNavigate("/wydarzenia/" + encodeURIComponent(id));
 
   const load = async () => {
     setLoading(true);
@@ -1522,7 +1489,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
           <div className="px-5 space-y-3">
             {combined.map(it => (
               <Card key={it._type + ":" + it.id} className="overflow-hidden"
-                onClick={it._type === "stacja" ? () => onOpenStacja(it.id) : undefined}>
+                onClick={it._type === "stacja" ? () => onOpenStacja(it.id) : () => openEvent(it.id)}>
                 <div className="flex">
                   {it.image && (
                     <img src={it.image} alt=""
@@ -1531,6 +1498,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                   <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
+                      {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">🚌 Kosmobus</span>}
                       <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(it.date, it.time)}</span>
                     </div>
                     <div className="flex items-start justify-between gap-3 flex-1">
@@ -1553,7 +1521,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
               <>
                 <div className="font-mono text-xs uppercase tracking-widest opacity-60 pt-6 pb-2">Bez daty</div>
                 {eventsNoDate.map(it => (
-                  <Card key={it.id} className="overflow-hidden">
+                  <Card key={it.id} className="overflow-hidden" onClick={() => openEvent(it.id)}>
                     <div className="flex">
                       {it.image && (
                         <img src={it.image} alt=""
@@ -1561,13 +1529,14 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                       )}
                       <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
+                          {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2">🚌 Kosmobus</span>}
                           <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
                           {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
                         </div>
                         {isAdmin && (
                           <div className="flex flex-col gap-2 shrink-0">
-                            <Button variant="outline" size="sm" onClick={() => { setEditing(it); setModalOpen(true); }}>Edytuj</Button>
-                            <Button variant="outline" size="sm" onClick={() => remove(it.id)}>Usuń</Button>
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setEditing(it); setModalOpen(true); }}>Edytuj</Button>
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); remove(it.id); }}>Usuń</Button>
                           </div>
                         )}
                       </div>
@@ -1585,19 +1554,21 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
 };
 
 const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
-  const [form, setForm] = useState({ title: "", description: "", image: null, date: "", time: "" });
+  const [form, setForm] = useState({ title: "", description: "", image: null, date: "", time: "", kosmobusEnabled: false });
   useEffect(() => {
     if (open) setForm(editing ? {
       title: editing.title || "", description: editing.description || "",
-      image: editing.image || null, date: editing.date || "", time: editing.time || ""
-    } : { title: "", description: "", image: null, date: "", time: "" });
+      image: editing.image || null, date: editing.date || "", time: editing.time || "",
+      kosmobusEnabled: !!editing.kosmobusEnabled
+    } : { title: "", description: "", image: null, date: "", time: "", kosmobusEnabled: false });
   }, [open, editing]);
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const submit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
     onSave({ title: form.title.trim(), description: form.description.trim(),
-      image: form.image, date: form.date || null, time: form.time || null });
+      image: form.image, date: form.date || null, time: form.time || null,
+      kosmobusEnabled: form.kosmobusEnabled });
   };
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj wydarzenie" : "Nowe wydarzenie"}>
@@ -1605,9 +1576,22 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Data" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
           <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
+        </div>
+        {/* Kosmobus toggle */}
+        <div className="border-t border-black pt-4">
+          <button type="button" onClick={() => update("kosmobusEnabled", !form.kosmobusEnabled)}
+            className={`w-full text-left border px-4 py-3 transition-colors ${form.kosmobusEnabled ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-base">🚌</span>
+              <span className="font-display text-sm">Kosmobus {form.kosmobusEnabled && "— włączony"}</span>
+            </div>
+            <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.kosmobusEnabled ? "opacity-80" : "opacity-60"}`}>
+              Transport dla gości · maks. 7 miejsc
+            </div>
+          </button>
         </div>
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>
@@ -1617,6 +1601,184 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
     </Modal>
   );
 };
+
+// ============================================================
+// WYDARZENIE DETAIL VIEW
+// ============================================================
+const KOSMOBUS_SEATS = 7;
+
+const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) => {
+  const [item, setItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const it = await storage.get("wydarzenie:" + wydarzenieId);
+    setItem(it);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [wydarzenieId]);
+
+  if (loading) return <div className="flex justify-center py-20"><div className="spinner" /></div>;
+  if (!item) return (
+    <div className="p-5">
+      <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
+      <EmptyState message="Wydarzenie nie znalezione" />
+    </div>
+  );
+
+  const isAdmin = user.role === "admin";
+
+  const saveEdit = async (data) => {
+    const updated = { ...item, ...data };
+    await storage.set("wydarzenie:" + item.id, updated);
+    setEditOpen(false);
+    setItem(updated);
+    onRefresh?.();
+  };
+
+  const remove = async () => {
+    if (!confirm("Usunąć to wydarzenie?")) return;
+    await storage.delete("wydarzenie:" + item.id);
+    onRefresh?.();
+    onBack();
+  };
+
+  // Kosmobus state
+  const enrolled = Array.isArray(item.kosmobusEnrolled) ? item.kosmobusEnrolled : [];
+  const isEnrolled = enrolled.includes(user.id);
+  const seatsTaken = enrolled.length;
+  const seatsLeft = KOSMOBUS_SEATS - seatsTaken;
+  const enrolledUsers = enrolled.map(id => users.find(u => u.id === id)).filter(Boolean);
+
+  const enroll = async () => {
+    if (isEnrolled || seatsLeft <= 0 || enrolling) return;
+    setEnrolling(true);
+    const updated = { ...item, kosmobusEnrolled: [...enrolled, user.id] };
+    const ok = await storage.set("wydarzenie:" + item.id, updated);
+    if (ok) setItem(updated);
+    setEnrolling(false);
+  };
+
+  const cancelEnroll = async () => {
+    if (!isEnrolled || enrolling) return;
+    if (!confirm("Wypisać się z Kosmobusu?")) return;
+    setEnrolling(true);
+    const updated = { ...item, kosmobusEnrolled: enrolled.filter(id => id !== user.id) };
+    const ok = await storage.set("wydarzenie:" + item.id, updated);
+    if (ok) setItem(updated);
+    setEnrolling(false);
+  };
+
+  const removeRider = async (userId) => {
+    if (!isAdmin) return;
+    if (!confirm("Usunąć tę osobę z Kosmobusu?")) return;
+    const updated = { ...item, kosmobusEnrolled: enrolled.filter(id => id !== userId) };
+    const ok = await storage.set("wydarzenie:" + item.id, updated);
+    if (ok) setItem(updated);
+  };
+
+  return (
+    <div className="pb-20">
+      <div className="px-5 pt-5">
+        <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
+      </div>
+      {item.image && (
+        <div className="mt-5 mx-5 border border-black">
+          <img src={item.image} alt="" className="w-full h-64 sm:h-80 object-cover block" />
+        </div>
+      )}
+      <div className="px-5 pt-5">
+        <div className="flex flex-wrap gap-2 mb-3">
+          {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
+          {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">🚌 Kosmobus</span>}
+        </div>
+        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">{item.title}</h1>
+        {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
+      </div>
+
+      {/* Kosmobus widget */}
+      {item.kosmobusEnabled && (
+        <div className="mx-5 border border-black p-5 mb-6">
+          <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🚌</span>
+                <h2 className="font-display text-xl">Kosmobus</h2>
+              </div>
+              <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                Transport na wydarzenie
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="font-display text-2xl leading-none">
+                {seatsTaken} / {KOSMOBUS_SEATS}
+              </div>
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                {seatsLeft > 0 ? `${seatsLeft} ${seatsLeft === 1 ? "miejsce" : seatsLeft < 5 ? "miejsca" : "miejsc"} wolne` : "Brak miejsc"}
+              </div>
+            </div>
+          </div>
+
+          {/* Enroll/cancel button */}
+          <div className="mb-4">
+            {isEnrolled ? (
+              <Button variant="outline" onClick={cancelEnroll} disabled={enrolling} className="w-full">
+                {enrolling ? "..." : "Wypisz mnie"}
+              </Button>
+            ) : seatsLeft > 0 ? (
+              <Button onClick={enroll} disabled={enrolling} className="w-full">
+                {enrolling ? "..." : "Zapisz mnie"}
+              </Button>
+            ) : (
+              <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
+                Brak wolnych miejsc
+              </div>
+            )}
+          </div>
+
+          {/* Enrolled riders list */}
+          {enrolledUsers.length > 0 && (
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">
+                Zapisani ({enrolledUsers.length})
+              </div>
+              <div className="space-y-2">
+                {enrolledUsers.map(u => (
+                  <div key={u.id} className="flex items-center gap-3 border border-black p-2">
+                    <div className="w-9 h-9 border border-black overflow-hidden shrink-0">
+                      {u.profilePicture
+                        ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center font-display">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display text-sm truncate">{u.firstName || u.username} {u.lastName}</div>
+                      <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
+                    </div>
+                    {isAdmin && u.id !== user.id && (
+                      <button onClick={() => removeRider(u.id)} className="font-mono text-[10px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="px-5 flex gap-3">
+          <Button variant="outline" onClick={() => setEditOpen(true)} className="flex-1">Edytuj</Button>
+          <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
+        </div>
+      )}
+      <WydarzenieFormModal open={editOpen} onClose={() => setEditOpen(false)} editing={item} onSave={saveEdit} />
+    </div>
+  );
+};
+
 
 // ============================================================
 // O FESTIWALU VIEW
@@ -1796,7 +1958,7 @@ const MiejsceView = ({ user }) => {
 
   return (
     <div className="pb-20">
-      <PageHeader title="Miejsce"
+      <PageHeader title="Gdzie i kiedy"
         action={isAdmin && <Button size="sm" onClick={() => setEditOpen(true)}>Edytuj</Button>} />
       {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
         : (
@@ -1870,7 +2032,7 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
   const submit = (e) => { e.preventDefault(); onSave(form); };
 
   return (
-    <Modal open={open} onClose={onClose} title="Edytuj miejsce" maxWidth="max-w-xl">
+    <Modal open={open} onClose={onClose} title="Edytuj informacje" maxWidth="max-w-xl">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Zdjęcia</span>
@@ -2209,7 +2371,6 @@ export default function App() {
     home: "/",
     wydarzenia: "/wydarzenia",
     stacje: "/stacje",
-    cnoty: "/cnoty",
     festiwal: "/festiwal",
     miejsce: "/miejsce",
     profile: "/profil",
@@ -2221,6 +2382,9 @@ export default function App() {
     const seg = pathname.split("/")[1];
     if (seg === "stacje") {
       return pathname.split("/").length > 2 ? "stacja-detail" : "stacje";
+    }
+    if (seg === "wydarzenia") {
+      return pathname.split("/").length > 2 ? "wydarzenie-detail" : "wydarzenia";
     }
     if (seg === "profil") return "profile";
     return seg || "home";
@@ -2408,6 +2572,15 @@ export default function App() {
     );
   };
 
+  const WydarzenieDetailRoute = () => {
+    const { id } = useParams();
+    return (
+      <WydarzenieDetailView wydarzenieId={id} user={user} users={users}
+        onBack={() => routerNavigate("/wydarzenia")}
+        onRefresh={() => setStacjeRefreshKey(k => k + 1)} />
+    );
+  };
+
   return (
     <>
       <GlobalStyles />
@@ -2444,11 +2617,11 @@ export default function App() {
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />
             } />
+            <Route path="/wydarzenia/:id" element={<WydarzenieDetailRoute />} />
             <Route path="/stacje" element={
               <StacjeView key={stacjeRefreshKey} user={user} users={users} onOpenDetail={openStacjaDetail} />
             } />
             <Route path="/stacje/:id" element={<StacjaDetailRoute />} />
-            <Route path="/cnoty" element={<CnotyView user={user} />} />
             <Route path="/festiwal" element={<FestiwalView user={user} />} />
             <Route path="/miejsce" element={<MiejsceView user={user} />} />
             <Route path="/profil" element={

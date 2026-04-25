@@ -1799,22 +1799,55 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
 };
 
 const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
-  const [form, setForm] = useState({ title: "", description: "", image: null, date: "", time: "", kosmobusEnabled: false });
+  const [form, setForm] = useState({
+    title: "", description: "", image: null, date: "", time: "",
+    kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false
+  });
   useEffect(() => {
     if (open) setForm(editing ? {
       title: editing.title || "", description: editing.description || "",
       image: editing.image || null, date: editing.date || "", time: editing.time || "",
-      kosmobusEnabled: !!editing.kosmobusEnabled
-    } : { title: "", description: "", image: null, date: "", time: "", kosmobusEnabled: false });
+      kosmobusEnabled: !!editing.kosmobusEnabled,
+      guestListEnabled: !!editing.guestListEnabled,
+      transportNeeded: !!editing.transportNeeded
+    } : {
+      title: "", description: "", image: null, date: "", time: "",
+      kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false
+    });
   }, [open, editing]);
-  const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const update = (k, v) => setForm(prev => {
+    const next = { ...prev, [k]: v };
+    // If transport is turned off, kosmobus must also turn off (it depends on transport)
+    if (k === "transportNeeded" && !v) next.kosmobusEnabled = false;
+    return next;
+  });
   const submit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    onSave({ title: form.title.trim(), description: form.description.trim(),
+    onSave({
+      title: form.title.trim(), description: form.description.trim(),
       image: form.image, date: form.date || null, time: form.time || null,
-      kosmobusEnabled: form.kosmobusEnabled });
+      kosmobusEnabled: form.kosmobusEnabled,
+      guestListEnabled: form.guestListEnabled,
+      transportNeeded: form.transportNeeded
+    });
   };
+
+  // Reusable toggle button
+  const Toggle = ({ enabled, onClick, emoji, title, subtitle, disabled }) => (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className={`w-full text-left border px-4 py-3 transition-colors ${
+        disabled ? "border-black/30 opacity-40 cursor-not-allowed" :
+        enabled ? "bg-black text-white border-black" : "border-black hover:bg-black/5"
+      }`}>
+      <div className="flex items-center gap-2">
+        {emoji && <span className="text-base emoji-mono">{emoji}</span>}
+        <span className="font-display text-sm">{title}{enabled && " — włączone"}</span>
+      </div>
+      {subtitle && <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${enabled ? "opacity-80" : "opacity-60"}`}>{subtitle}</div>}
+    </button>
+  );
+
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj wydarzenie" : "Nowe wydarzenie"}>
       <form onSubmit={submit} className="space-y-4">
@@ -1825,18 +1858,24 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
           <Input label="Data" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
           <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
         </div>
-        {/* Kosmobus toggle */}
-        <div className="border-t border-black pt-4">
-          <button type="button" onClick={() => update("kosmobusEnabled", !form.kosmobusEnabled)}
-            className={`w-full text-left border px-4 py-3 transition-colors ${form.kosmobusEnabled ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-base emoji-mono">🚌</span>
-              <span className="font-display text-sm">Kosmobus {form.kosmobusEnabled && "— włączony"}</span>
-            </div>
-            <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.kosmobusEnabled ? "opacity-80" : "opacity-60"}`}>
-              Transport dla gości · maks. 7 miejsc
-            </div>
-          </button>
+        {/* Feature toggles */}
+        <div className="border-t border-black pt-4 space-y-2">
+          <Toggle enabled={form.guestListEnabled}
+            onClick={() => update("guestListEnabled", !form.guestListEnabled)}
+            emoji="👥"
+            title="Lista gości"
+            subtitle="Goście mogą zapisywać się sami; admin zarządza listą" />
+          <Toggle enabled={form.transportNeeded}
+            onClick={() => update("transportNeeded", !form.transportNeeded)}
+            emoji="🚗"
+            title="Potrzebny transport"
+            subtitle="Włącza opcje transportu — Kosmobus i własne podwózki" />
+          <Toggle enabled={form.kosmobusEnabled}
+            onClick={() => update("kosmobusEnabled", !form.kosmobusEnabled)}
+            disabled={!form.transportNeeded}
+            emoji="🚌"
+            title="Kosmobus"
+            subtitle={form.transportNeeded ? "Transport organizowany — maks. 7 miejsc" : "Wymaga: Potrzebny transport"} />
         </div>
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>
@@ -1856,7 +1895,10 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
-  const [enrolling, setEnrolling] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // For admin "add user" pickers (which collection it's adding to)
+  const [pickerOpen, setPickerOpen] = useState(null); // null | "guestList" | "kosmobus" | transportId
+  const [transportFormOpen, setTransportFormOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1876,11 +1918,21 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
 
   const isAdmin = user.role === "admin";
 
+  // Generic save — applies a partial update to the event record
+  const persist = async (updater) => {
+    setBusy(true);
+    try {
+      const next = typeof updater === "function" ? updater(item) : { ...item, ...updater };
+      const ok = await storage.set("wydarzenie:" + item.id, next);
+      if (ok) setItem(next);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveEdit = async (data) => {
-    const updated = { ...item, ...data };
-    await storage.set("wydarzenie:" + item.id, updated);
+    await persist({ ...item, ...data });
     setEditOpen(false);
-    setItem(updated);
     onRefresh?.();
   };
 
@@ -1891,39 +1943,122 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
     onBack();
   };
 
-  // Kosmobus state
-  const enrolled = Array.isArray(item.kosmobusEnrolled) ? item.kosmobusEnrolled : [];
-  const isEnrolled = enrolled.includes(user.id);
-  const seatsTaken = enrolled.length;
-  const seatsLeft = KOSMOBUS_SEATS - seatsTaken;
-  const enrolledUsers = enrolled.map(id => users.find(u => u.id === id)).filter(Boolean);
+  // ----------------------- Guest list -----------------------
+  const guestList = Array.isArray(item.guestList) ? item.guestList : [];
+  const isOnGuestList = guestList.includes(user.id);
+  const guestUsers = guestList.map(id => users.find(u => u.id === id)).filter(Boolean);
 
-  const enroll = async () => {
-    if (isEnrolled || seatsLeft <= 0 || enrolling) return;
-    setEnrolling(true);
-    const updated = { ...item, kosmobusEnrolled: [...enrolled, user.id] };
-    const ok = await storage.set("wydarzenie:" + item.id, updated);
-    if (ok) setItem(updated);
-    setEnrolling(false);
+  const enrollGuest = async () => {
+    if (isOnGuestList || busy) return;
+    await persist({ ...item, guestList: [...guestList, user.id] });
+  };
+  const cancelGuest = async () => {
+    if (!isOnGuestList || busy) return;
+    if (!confirm("Wypisać się z listy gości?")) return;
+    await persist({ ...item, guestList: guestList.filter(id => id !== user.id) });
+  };
+  const adminAddGuest = async (userId) => {
+    if (guestList.includes(userId)) return;
+    await persist({ ...item, guestList: [...guestList, userId] });
+  };
+  const adminRemoveGuest = async (userId) => {
+    if (!confirm("Usunąć tę osobę z listy gości?")) return;
+    await persist({ ...item, guestList: guestList.filter(id => id !== userId) });
   };
 
-  const cancelEnroll = async () => {
-    if (!isEnrolled || enrolling) return;
+  // ----------------------- Kosmobus -----------------------
+  const kosmoEnrolled = Array.isArray(item.kosmobusEnrolled) ? item.kosmobusEnrolled : [];
+  const onKosmo = kosmoEnrolled.includes(user.id);
+  const kosmoUsers = kosmoEnrolled.map(id => users.find(u => u.id === id)).filter(Boolean);
+  const kosmoLeft = KOSMOBUS_SEATS - kosmoEnrolled.length;
+
+  const enrollKosmo = async () => {
+    if (onKosmo || kosmoLeft <= 0 || busy) return;
+    await persist({ ...item, kosmobusEnrolled: [...kosmoEnrolled, user.id] });
+  };
+  const cancelKosmo = async () => {
+    if (!onKosmo || busy) return;
     if (!confirm("Wypisać się z Kosmobusu?")) return;
-    setEnrolling(true);
-    const updated = { ...item, kosmobusEnrolled: enrolled.filter(id => id !== user.id) };
-    const ok = await storage.set("wydarzenie:" + item.id, updated);
-    if (ok) setItem(updated);
-    setEnrolling(false);
+    await persist({ ...item, kosmobusEnrolled: kosmoEnrolled.filter(id => id !== user.id) });
+  };
+  const adminAddKosmo = async (userId) => {
+    if (kosmoEnrolled.includes(userId) || kosmoEnrolled.length >= KOSMOBUS_SEATS) return;
+    await persist({ ...item, kosmobusEnrolled: [...kosmoEnrolled, userId] });
+  };
+  const adminRemoveKosmo = async (userId) => {
+    if (!confirm("Usunąć tę osobę z Kosmobusu?")) return;
+    await persist({ ...item, kosmobusEnrolled: kosmoEnrolled.filter(id => id !== userId) });
   };
 
-  const removeRider = async (userId) => {
-    if (!isAdmin) return;
-    if (!confirm("Usunąć tę osobę z Kosmobusu?")) return;
-    const updated = { ...item, kosmobusEnrolled: enrolled.filter(id => id !== userId) };
-    const ok = await storage.set("wydarzenie:" + item.id, updated);
-    if (ok) setItem(updated);
+  // ----------------------- Custom transports -----------------------
+  const transports = Array.isArray(item.transports) ? item.transports : [];
+
+  const createTransport = async ({ emoji, name, totalSeats }) => {
+    const t = {
+      id: uid(),
+      ownerId: user.id,
+      emoji: emoji || "",
+      name: name.trim(),
+      totalSeats: Math.max(1, parseInt(totalSeats, 10) || 1),
+      enrolled: [user.id]  // owner is auto-enrolled
+    };
+    await persist({ ...item, transports: [...transports, t] });
+    setTransportFormOpen(false);
   };
+
+  const enrollTransport = async (tId) => {
+    const next = transports.map(t => {
+      if (t.id !== tId) return t;
+      if (t.enrolled.includes(user.id)) return t;
+      if (t.enrolled.length >= t.totalSeats) return t;
+      return { ...t, enrolled: [...t.enrolled, user.id] };
+    });
+    await persist({ ...item, transports: next });
+  };
+
+  const cancelTransport = async (tId) => {
+    if (!confirm("Wypisać się z tej podwózki?")) return;
+    const next = transports.map(t =>
+      t.id === tId ? { ...t, enrolled: t.enrolled.filter(id => id !== user.id) } : t
+    );
+    await persist({ ...item, transports: next });
+  };
+
+  const ownerRemoveTransportRider = async (tId, userId) => {
+    if (!confirm("Usunąć tę osobę z podwózki?")) return;
+    const next = transports.map(t =>
+      t.id === tId ? { ...t, enrolled: t.enrolled.filter(id => id !== userId) } : t
+    );
+    await persist({ ...item, transports: next });
+  };
+
+  const ownerAddTransportRider = async (tId, userId) => {
+    const next = transports.map(t => {
+      if (t.id !== tId) return t;
+      if (t.enrolled.includes(userId) || t.enrolled.length >= t.totalSeats) return t;
+      return { ...t, enrolled: [...t.enrolled, userId] };
+    });
+    await persist({ ...item, transports: next });
+  };
+
+  const ownerDeleteTransport = async (tId) => {
+    if (!confirm("Usunąć tę podwózkę i wszystkich zapisanych?")) return;
+    await persist({ ...item, transports: transports.filter(t => t.id !== tId) });
+  };
+
+  // ----------------------- User picker for admin add buttons -----------------------
+  // Builds a list of users not already in a given collection
+  const availableUsers = (excludeIds) => users.filter(u => !excludeIds.includes(u.id));
+
+  const handlePickerSelect = async (userId) => {
+    if (pickerOpen === "guestList") await adminAddGuest(userId);
+    else if (pickerOpen === "kosmobus") await adminAddKosmo(userId);
+    else if (typeof pickerOpen === "string") await ownerAddTransportRider(pickerOpen, userId);
+    setPickerOpen(null);
+  };
+
+  // Map seats remaining to grammar (Polish plurals)
+  const seatsLabel = (n) => n === 1 ? "miejsce" : (n >= 2 && n <= 4) ? "miejsca" : "miejsc";
 
   return (
     <div className="pb-20">
@@ -1938,78 +2073,189 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
+          {item.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">👥</span> Lista gości</span>}
+          {item.transportNeeded && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">🚗</span> Transport</span>}
           {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">{item.title}</h1>
         {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
       </div>
 
-      {/* Kosmobus widget */}
-      {item.kosmobusEnabled && (
+      {/* Guest list section */}
+      {item.guestListEnabled && (
         <div className="mx-5 border border-black p-5 mb-6">
           <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl emoji-mono">🚌</span>
-                <h2 className="font-display text-xl">Kosmobus</h2>
+                <span className="text-2xl emoji-mono">👥</span>
+                <h2 className="font-display text-xl">Lista gości</h2>
               </div>
               <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
-                Transport na wydarzenie
+                {guestUsers.length} {guestUsers.length === 1 ? "osoba" : "osób"}
               </p>
             </div>
-            <div className="text-right">
-              <div className="font-display text-2xl leading-none">
-                {seatsTaken} / {KOSMOBUS_SEATS}
-              </div>
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
-                {seatsLeft > 0 ? `${seatsLeft} ${seatsLeft === 1 ? "miejsce" : seatsLeft < 5 ? "miejsca" : "miejsc"} wolne` : "Brak miejsc"}
-              </div>
-            </div>
           </div>
-
-          {/* Enroll/cancel button */}
           <div className="mb-4">
-            {isEnrolled ? (
-              <Button variant="outline" onClick={cancelEnroll} disabled={enrolling} className="w-full">
-                {enrolling ? "..." : "Wypisz mnie"}
-              </Button>
-            ) : seatsLeft > 0 ? (
-              <Button onClick={enroll} disabled={enrolling} className="w-full">
-                {enrolling ? "..." : "Zapisz mnie"}
+            {isOnGuestList ? (
+              <Button variant="outline" onClick={cancelGuest} disabled={busy} className="w-full">
+                {busy ? "..." : "Wypisz mnie"}
               </Button>
             ) : (
-              <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
-                Brak wolnych miejsc
-              </div>
+              <Button onClick={enrollGuest} disabled={busy} className="w-full">
+                {busy ? "..." : "Zapisz mnie na listę"}
+              </Button>
             )}
           </div>
-
-          {/* Enrolled riders list */}
-          {enrolledUsers.length > 0 && (
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">
-                Zapisani ({enrolledUsers.length})
-              </div>
-              <div className="space-y-2">
-                {enrolledUsers.map(u => (
-                  <div key={u.id} className="flex items-center gap-3 border border-black p-2">
-                    <div className="w-9 h-9 border border-black overflow-hidden shrink-0">
-                      {u.profilePicture
-                        ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center font-display">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-display text-sm truncate">{u.firstName || u.username} {u.lastName}</div>
-                      <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
-                    </div>
-                    {isAdmin && u.id !== user.id && (
-                      <button onClick={() => removeRider(u.id)} className="font-mono text-[10px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
-                    )}
-                  </div>
-                ))}
-              </div>
+          {isAdmin && availableUsers(guestList).length > 0 && (
+            <Button variant="outline" size="sm" className="w-full mb-3" onClick={() => setPickerOpen("guestList")}>+ Dodaj osobę</Button>
+          )}
+          {guestUsers.length > 0 ? (
+            <div className="space-y-2">
+              {guestUsers.map(u => (
+                <UserRow key={u.id} u={u}
+                  showRemove={isAdmin && u.id !== user.id}
+                  onRemove={() => adminRemoveGuest(u.id)} />
+              ))}
+            </div>
+          ) : (
+            <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
+              Nikt jeszcze się nie zapisał
             </div>
           )}
+        </div>
+      )}
+
+      {/* Transport section */}
+      {item.transportNeeded && (
+        <div className="mx-5 mb-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl emoji-mono">🚗</span>
+            <h2 className="font-display text-xl">Potrzebny transport</h2>
+          </div>
+
+          {/* Kosmobus widget */}
+          {item.kosmobusEnabled && (
+            <div className="border border-black p-5">
+              <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl emoji-mono">🚌</span>
+                    <h3 className="font-display text-lg">Kosmobus</h3>
+                  </div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                    Transport organizowany
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="font-display text-2xl leading-none">
+                    {kosmoEnrolled.length} / {KOSMOBUS_SEATS}
+                  </div>
+                  <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                    {kosmoLeft > 0 ? `${kosmoLeft} ${seatsLabel(kosmoLeft)} wolne` : "Brak miejsc"}
+                  </div>
+                </div>
+              </div>
+              <div className="mb-3">
+                {onKosmo ? (
+                  <Button variant="outline" onClick={cancelKosmo} disabled={busy} className="w-full">
+                    {busy ? "..." : "Wypisz mnie"}
+                  </Button>
+                ) : kosmoLeft > 0 ? (
+                  <Button onClick={enrollKosmo} disabled={busy} className="w-full">
+                    {busy ? "..." : "Zapisz mnie"}
+                  </Button>
+                ) : (
+                  <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
+                    Brak wolnych miejsc
+                  </div>
+                )}
+              </div>
+              {isAdmin && kosmoLeft > 0 && availableUsers(kosmoEnrolled).length > 0 && (
+                <Button variant="outline" size="sm" className="w-full mb-3" onClick={() => setPickerOpen("kosmobus")}>+ Dodaj osobę</Button>
+              )}
+              {kosmoUsers.length > 0 && (
+                <div className="space-y-2">
+                  {kosmoUsers.map(u => (
+                    <UserRow key={u.id} u={u}
+                      showRemove={isAdmin && u.id !== user.id}
+                      onRemove={() => adminRemoveKosmo(u.id)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Custom transports */}
+          {transports.map(t => {
+            const isOwner = t.ownerId === user.id;
+            const onThis = t.enrolled.includes(user.id);
+            const seatsLeft = t.totalSeats - t.enrolled.length;
+            const enrolledU = t.enrolled.map(id => users.find(u => u.id === id)).filter(Boolean);
+            return (
+              <div key={t.id} className="border border-black p-5">
+                <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {t.emoji && <span className="text-2xl emoji-mono">{t.emoji}</span>}
+                      <h3 className="font-display text-lg break-words">{t.name}</h3>
+                    </div>
+                    <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                      Organizator: {(() => {
+                        const o = users.find(u => u.id === t.ownerId);
+                        return o ? (o.firstName || o.username) : "—";
+                      })()}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-display text-2xl leading-none">
+                      {t.enrolled.length} / {t.totalSeats}
+                    </div>
+                    <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                      {seatsLeft > 0 ? `${seatsLeft} ${seatsLabel(seatsLeft)} wolne` : "Brak miejsc"}
+                    </div>
+                  </div>
+                </div>
+                <div className="mb-3">
+                  {onThis ? (
+                    <Button variant="outline" onClick={() => cancelTransport(t.id)} disabled={busy || isOwner} className="w-full">
+                      {isOwner ? "Jesteś organizatorem" : busy ? "..." : "Wypisz mnie"}
+                    </Button>
+                  ) : seatsLeft > 0 ? (
+                    <Button onClick={() => enrollTransport(t.id)} disabled={busy} className="w-full">
+                      {busy ? "..." : "Zapisz mnie"}
+                    </Button>
+                  ) : (
+                    <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
+                      Brak wolnych miejsc
+                    </div>
+                  )}
+                </div>
+                {(isOwner || isAdmin) && (
+                  <div className="flex gap-2 mb-3">
+                    {seatsLeft > 0 && availableUsers(t.enrolled).length > 0 && (
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => setPickerOpen(t.id)}>+ Dodaj osobę</Button>
+                    )}
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => ownerDeleteTransport(t.id)}>Usuń podwózkę</Button>
+                  </div>
+                )}
+                {enrolledU.length > 0 && (
+                  <div className="space-y-2">
+                    {enrolledU.map(u => (
+                      <UserRow key={u.id} u={u}
+                        badge={u.id === t.ownerId ? "organizator" : null}
+                        showRemove={(isOwner || isAdmin) && u.id !== t.ownerId}
+                        onRemove={() => ownerRemoveTransportRider(t.id, u.id)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add transport CTA (anyone can create) */}
+          <Button variant="outline" className="w-full" onClick={() => setTransportFormOpen(true)}>
+            + Dodaj swoją podwózkę
+          </Button>
         </div>
       )}
 
@@ -2019,8 +2265,131 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
           <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
         </div>
       )}
+
       <WydarzenieFormModal open={editOpen} onClose={() => setEditOpen(false)} editing={item} onSave={saveEdit} />
+
+      {/* User picker modal — used by admin/owner add buttons */}
+      <UserPickerModal
+        open={!!pickerOpen}
+        onClose={() => setPickerOpen(null)}
+        users={(() => {
+          if (pickerOpen === "guestList") return availableUsers(guestList);
+          if (pickerOpen === "kosmobus") return availableUsers(kosmoEnrolled);
+          if (typeof pickerOpen === "string") {
+            const t = transports.find(t => t.id === pickerOpen);
+            return t ? availableUsers(t.enrolled) : [];
+          }
+          return [];
+        })()}
+        onPick={handlePickerSelect}
+      />
+
+      {/* Custom transport form */}
+      <TransportFormModal open={transportFormOpen}
+        onClose={() => setTransportFormOpen(false)}
+        onSave={createTransport} />
     </div>
+  );
+};
+
+// Compact row to display a user (avatar, name, optional badge, optional remove button)
+const UserRow = ({ u, badge, showRemove, onRemove }) => (
+  <div className="flex items-center gap-3 border border-black p-2">
+    <div className="w-9 h-9 border border-black overflow-hidden shrink-0">
+      {u.profilePicture
+        ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
+        : <div className="w-full h-full flex items-center justify-center font-display">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+    </div>
+    <div className="flex-1 min-w-0">
+      <div className="font-display text-sm truncate">
+        {u.firstName || u.username} {u.lastName}
+        {badge && <span className="ml-2 font-mono text-[9px] uppercase tracking-widest opacity-60">· {badge}</span>}
+      </div>
+      <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
+    </div>
+    {showRemove && (
+      <button onClick={onRemove} className="font-mono text-[10px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
+    )}
+  </div>
+);
+
+const UserPickerModal = ({ open, onClose, users, onPick }) => {
+  const [q, setQ] = useState("");
+  useEffect(() => { if (open) setQ(""); }, [open]);
+  const filtered = users.filter(u => {
+    if (!q) return true;
+    const s = q.toLowerCase();
+    return (u.username || "").toLowerCase().includes(s)
+      || (u.firstName || "").toLowerCase().includes(s)
+      || (u.lastName || "").toLowerCase().includes(s);
+  });
+  return (
+    <Modal open={open} onClose={onClose} title="Dodaj osobę">
+      <div className="space-y-3">
+        <Input placeholder="Szukaj…" value={q} onChange={e => setQ(e.target.value)} autoCapitalize="none" />
+        {filtered.length === 0 ? (
+          <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-center py-6">
+            Brak osób do dodania
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {filtered.map(u => (
+              <button key={u.id} onClick={() => onPick(u.id)}
+                className="w-full flex items-center gap-3 border border-black p-2 text-left hover:bg-black hover:text-white transition-colors">
+                <div className="w-9 h-9 border border-black overflow-hidden shrink-0">
+                  {u.profilePicture
+                    ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center font-display">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-display text-sm truncate">{u.firstName || u.username} {u.lastName}</div>
+                  <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+const TransportFormModal = ({ open, onClose, onSave }) => {
+  const [form, setForm] = useState({ emoji: "", name: "", totalSeats: 4 });
+  useEffect(() => { if (open) setForm({ emoji: "", name: "", totalSeats: 4 }); }, [open]);
+  const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    if (form.totalSeats < 1) return;
+    onSave(form);
+  };
+  return (
+    <Modal open={open} onClose={onClose} title="Twoja podwózka">
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Emoji</span>
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 border border-black flex items-center justify-center text-3xl emoji-mono shrink-0">
+              {form.emoji || "·"}
+            </div>
+            <Input className="flex-1" placeholder="Wpisz emoji" value={form.emoji}
+              onChange={e => update("emoji", e.target.value)} maxLength={4} />
+          </div>
+        </div>
+        <Input label="Nazwa" value={form.name} onChange={e => update("name", e.target.value)}
+          placeholder="np. Auto Kasi z Warszawy" required />
+        <Input label="Łączna liczba miejsc (z Tobą)" type="number" min="1" max="20"
+          value={form.totalSeats} onChange={e => update("totalSeats", parseInt(e.target.value, 10) || 1)} required />
+        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+          Po zapisaniu zostaniesz automatycznie dodany jako organizator.
+        </p>
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" className="flex-1">Utwórz</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 
@@ -2857,6 +3226,11 @@ export default function App() {
             setUser(u);
             const s = await storage.get("settings");
             if (!cancelled) setGuestListVisible(!!s?.guestListVisible);
+            // Warm the cache for the rest of the app
+            storage.prefetchAll("user:");
+            storage.prefetchAll("wydarzenie:");
+            storage.prefetchAll("stacja:");
+            storage.prefetchAll("fsection:");
           } else if (!cancelled) {
             // Session pointed to a user that no longer exists
             try { localStorage.removeItem("campbau:session"); } catch {}
@@ -2877,6 +3251,11 @@ export default function App() {
     try { localStorage.setItem("campbau:session", u.username); } catch {}
     const s = await storage.get("settings");
     setGuestListVisible(!!s?.guestListVisible);
+    // Warm the cache so navigation feels instant
+    storage.prefetchAll("user:");
+    storage.prefetchAll("wydarzenie:");
+    storage.prefetchAll("stacja:");
+    storage.prefetchAll("fsection:");
   };
 
   const onLogout = () => {
@@ -2884,6 +3263,7 @@ export default function App() {
     setDrawerOpen(false);
     routerNavigate("/");
     try { localStorage.removeItem("campbau:session"); } catch {}
+    storage.invalidateAll();
   };
 
   const onUpdateUser = (updated) => {

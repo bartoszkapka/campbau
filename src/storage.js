@@ -127,52 +127,162 @@ const emitError = (op, key, err) => {
   }
 };
 
-// Simple in-memory cache. Cleared on any mutation that affects a key.
-// TTL keeps us safe from staleness if multiple tabs/users edit at once.
-const CACHE_TTL_MS = 30_000;
-const cache = new Map(); // key/prefix -> { value, ts }
+// ============================================================
+// Cache layer
+//
+// Two-tier:
+//   1. In-memory Map for fast reads within a single page session.
+//   2. localStorage for cross-session persistence — hard refresh can serve
+//      "stale" data instantly while a background refetch happens.
+//
+// Strategy: stale-while-revalidate.
+//   - If we have a fresh cached value (under FRESH_TTL_MS): return it.
+//   - If we have a stale value (under STALE_TTL_MS): return it AND refetch
+//     in the background, updating consumers via a custom event.
+//   - Otherwise: do the network fetch synchronously like before.
+//
+// Mutations (set/delete) invalidate cache entries that could be affected.
+// ============================================================
+
+const CACHE_LS_PREFIX = "campbau:cache:";
+const FRESH_TTL_MS  =  5 * 60 * 1000; //  5 min — return without refetch
+const STALE_TTL_MS  = 24 * 60 * 60 * 1000; // 24 hr — return + refetch in bg
+
+const cache = new Map(); // key -> { value, ts }
+const inflight = new Map(); // key -> Promise (dedupe parallel fetches)
+
+const cacheKeyForGet     = (key)    => "get:" + key;
+const cacheKeyForList    = (prefix) => "list:" + (prefix || "");
+const cacheKeyForGetAll  = (prefix) => "getAll:" + (prefix || "");
+
+const lsRead = (k) => {
+  try {
+    const v = localStorage.getItem(CACHE_LS_PREFIX + k);
+    if (v == null) return undefined;
+    const parsed = JSON.parse(v);
+    if (parsed && typeof parsed.ts === "number") return parsed;
+  } catch {}
+  return undefined;
+};
+const lsWrite = (k, value, ts) => {
+  try {
+    // Skip very large items to avoid blowing the localStorage quota
+    const json = JSON.stringify({ value, ts });
+    if (json.length > 500_000) return;
+    localStorage.setItem(CACHE_LS_PREFIX + k, json);
+  } catch {}
+};
+const lsDelete = (k) => {
+  try { localStorage.removeItem(CACHE_LS_PREFIX + k); } catch {}
+};
 
 const cacheGet = (k) => {
-  const e = cache.get(k);
-  if (!e) return undefined;
-  if (Date.now() - e.ts > CACHE_TTL_MS) { cache.delete(k); return undefined; }
-  return e.value;
+  let e = cache.get(k);
+  if (!e) {
+    const fromLs = lsRead(k);
+    if (fromLs) { cache.set(k, fromLs); e = fromLs; }
+  }
+  if (!e) return null;
+  const age = Date.now() - e.ts;
+  if (age <= FRESH_TTL_MS) return { value: e.value, fresh: true };
+  if (age <= STALE_TTL_MS) return { value: e.value, fresh: false };
+  // Expired beyond stale window — drop it
+  cache.delete(k);
+  lsDelete(k);
+  return null;
 };
-const cacheSet = (k, v) => cache.set(k, { value: v, ts: Date.now() });
+
+const cacheSet = (k, value) => {
+  const ts = Date.now();
+  cache.set(k, { value, ts });
+  lsWrite(k, value, ts);
+};
+
 const cacheInvalidate = (key) => {
-  cache.delete("get:" + key);
-  // Invalidate any prefix that this key would match (e.g. setting `cnota:abc` invalidates `getAll:cnota:`)
+  const drop = (k) => { cache.delete(k); lsDelete(k); };
+  drop(cacheKeyForGet(key));
   const colon = key.indexOf(":");
   if (colon >= 0) {
     const prefix = key.slice(0, colon + 1);
-    cache.delete("getAll:" + prefix);
-    cache.delete("list:" + prefix);
+    drop(cacheKeyForGetAll(prefix));
+    drop(cacheKeyForList(prefix));
   }
-  cache.delete("getAll:");
-  cache.delete("list:");
+  drop(cacheKeyForGetAll(""));
+  drop(cacheKeyForList(""));
+};
+
+// Notify listeners that a cached entry was refreshed in the background.
+// Components can listen to this event and reload state if they care.
+const emitRefresh = (cacheKey, value) => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("storage:refresh", {
+      detail: { cacheKey, value }
+    }));
+  }
+};
+
+// Wrap an async fetcher with stale-while-revalidate semantics.
+// Returns: a value (possibly stale). If stale, kicks off a background refresh.
+const swr = async (cacheKey, fetcher) => {
+  const cached = cacheGet(cacheKey);
+  if (cached?.fresh) return cached.value;
+
+  // If cached but stale, return it AND refresh in background (deduped)
+  if (cached) {
+    if (!inflight.has(cacheKey)) {
+      const p = (async () => {
+        try {
+          const fresh = await fetcher();
+          cacheSet(cacheKey, fresh);
+          emitRefresh(cacheKey, fresh);
+          return fresh;
+        } catch (err) {
+          // Swallow background errors silently — UI still has stale data
+          console.warn("swr bg refresh failed", cacheKey, err?.message || err);
+          return cached.value;
+        } finally {
+          inflight.delete(cacheKey);
+        }
+      })();
+      inflight.set(cacheKey, p);
+    }
+    return cached.value;
+  }
+
+  // No cached value — fetch synchronously, dedupe parallel calls
+  if (inflight.has(cacheKey)) return inflight.get(cacheKey);
+  const p = (async () => {
+    try {
+      const value = await fetcher();
+      cacheSet(cacheKey, value);
+      return value;
+    } finally {
+      inflight.delete(cacheKey);
+    }
+  })();
+  inflight.set(cacheKey, p);
+  return p;
 };
 
 export const storage = {
   async get(key) {
-    const cached = cacheGet("get:" + key);
-    if (cached !== undefined) return cached;
-    try {
-      const r = await rawStorage.get(key);
-      const value = r ? JSON.parse(r.value) : null;
-      cacheSet("get:" + key, value);
-      return value;
-    } catch (err) {
-      if (!String(err?.message || "").includes("404")) {
-        console.warn("storage.get failed", key, err);
+    return swr(cacheKeyForGet(key), async () => {
+      try {
+        const r = await rawStorage.get(key);
+        return r ? JSON.parse(r.value) : null;
+      } catch (err) {
+        if (!String(err?.message || "").includes("404")) {
+          console.warn("storage.get failed", key, err?.message || err);
+        }
+        return null;
       }
-      return null;
-    }
+    });
   },
   async set(key, value) {
     try {
       await rawStorage.set(key, JSON.stringify(value));
       cacheInvalidate(key);
-      cacheSet("get:" + key, value);
+      cacheSet(cacheKeyForGet(key), value);
       return true;
     } catch (err) {
       emitError("set", key, err);
@@ -187,40 +297,52 @@ export const storage = {
     } catch (err) { emitError("delete", key, err); return false; }
   },
   async list(prefix) {
-    const cached = cacheGet("list:" + (prefix || ""));
-    if (cached !== undefined) return cached;
-    try {
-      const r = await rawStorage.list(prefix);
-      const keys = r?.keys || [];
-      cacheSet("list:" + (prefix || ""), keys);
-      return keys;
-    } catch (err) {
-      emitError("list", prefix, err);
-      return [];
-    }
+    return swr(cacheKeyForList(prefix), async () => {
+      try {
+        const r = await rawStorage.list(prefix);
+        return r?.keys || [];
+      } catch (err) {
+        emitError("list", prefix, err);
+        return [];
+      }
+    });
   },
   async getAll(prefix) {
-    const cached = cacheGet("getAll:" + (prefix || ""));
-    if (cached !== undefined) return cached;
-    try {
-      const r = await rawStorage.getAll(prefix);
-      const items = r?.items || [];
-      const result = [];
-      for (const item of items) {
-        try {
-          const parsed = JSON.parse(item.value);
-          result.push(parsed);
-          // Prime the per-key get cache too — saves round-trips when detail page opens
-          cacheSet("get:" + item.key, parsed);
-        } catch {}
+    return swr(cacheKeyForGetAll(prefix), async () => {
+      try {
+        const r = await rawStorage.getAll(prefix);
+        const items = r?.items || [];
+        const result = [];
+        for (const item of items) {
+          try {
+            const parsed = JSON.parse(item.value);
+            result.push(parsed);
+            // Prime the per-key get cache too
+            cacheSet(cacheKeyForGet(item.key), parsed);
+          } catch {}
+        }
+        return result;
+      } catch (err) {
+        emitError("getAll", prefix, err);
+        return [];
       }
-      cacheSet("getAll:" + (prefix || ""), result);
-      return result;
-    } catch (err) {
-      emitError("getAll", prefix, err);
-      return [];
-    }
+    });
+  },
+  // Prefetch a getAll in the background — useful right after login.
+  // Returns immediately; result lands in the cache when ready.
+  prefetchAll(prefix) {
+    this.getAll(prefix).catch(() => {});
   },
   // Manual cache controls for special cases
-  invalidateAll() { cache.clear(); }
+  invalidateAll() {
+    cache.clear();
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(CACHE_LS_PREFIX)) keys.push(k);
+      }
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }
 };

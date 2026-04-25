@@ -17,7 +17,6 @@ const GlobalStyles = () => (
       overscroll-behavior: none;
       font-variant-emoji: text;
     }
-    body.dark { background: #050505; color: #fff; }
     /* Wrap the entire app in a horizontal overflow guard rather than the body,
        so internal horizontal scroll containers (sunset widget tiles) still work on iOS. */
     .app-shell { overflow-x: clip; }
@@ -37,6 +36,10 @@ const GlobalStyles = () => (
 
     /* ==========================================================
        ANIMATED FLOATING GRADIENT BACKGROUND
+       Six floating blobs cover the viewport with overlapping
+       saturated colors. translate3d in keyframes promotes blobs
+       to their own compositor layers so the animation runs on the
+       GPU rather than recomposing every frame.
        ========================================================== */
     .bg-stage {
       position: fixed;
@@ -44,20 +47,13 @@ const GlobalStyles = () => (
       z-index: -1;
       overflow: hidden;
       pointer-events: none;
-      /* No filter on the parent: the saturate() forced the whole element through
-         an extra compositing pass every frame, which dominates frame time on
-         lower-end devices. The blob colors are saturated enough on their own. */
     }
     .blob {
       position: absolute;
       border-radius: 50%;
       filter: blur(70px);
       opacity: 0.85;
-      /* translate3d in keyframes promotes blobs to their own compositor layers
-         so the animation runs on the GPU rather than recomposing every frame. */
     }
-    /* Mobile: smaller blur is enough since viewport is smaller, and mobile GPUs
-       are sensitive to large blur radii. */
     @media (max-width: 768px) {
       .blob { filter: blur(40px); opacity: 1; }
     }
@@ -65,8 +61,8 @@ const GlobalStyles = () => (
     .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 22s ease-in-out infinite alternate; }
     .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 16s ease-in-out infinite alternate; }
     .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 20s ease-in-out infinite alternate; }
-    /* blob-5 removed: 5 large blurred elements was too many overlapping layers
-       to composite smoothly. Four corner blobs cover the viewport just fine. */
+    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 24s ease-in-out infinite alternate; }
+    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 19s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -84,9 +80,13 @@ const GlobalStyles = () => (
       0%   { transform: translate3d(0, 0, 0) scale(1); }
       100% { transform: translate3d(-10vmax, -10vmax, 0) scale(1.1); }
     }
-    body.dark .blob { opacity: 0.18; filter: blur(110px); }
-    @media (max-width: 768px) {
-      body.dark .blob { filter: blur(60px); opacity: 0.25; }
+    @keyframes floatE {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(-20vmax, 15vmax, 0) scale(0.95); }
+    }
+    @keyframes floatF {
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(-25vmax, 20vmax, 0) scale(1.08); }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -95,53 +95,48 @@ const GlobalStyles = () => (
     .bg-stage-static .blob { animation: none !important; }
 
     /* ==========================================================
-       DARK MODE OVERRIDES — gradient UI over black
+       FORCE-DARK — used only by the drawer panel. Inverts colors
+       on its descendants so a single set of class names renders
+       correctly against the drawer's dark background.
        ========================================================== */
     :root {
       --grad: linear-gradient(135deg, #7ef7ff 0%, #ffc2ce 25%, #e872f5 50%, #9080ff 75%, #7ef7ff 100%);
     }
 
-    body.dark .border-black, .force-dark .border-black {
+    .force-dark .border-black {
       border-color: transparent;
       border-image: var(--grad) 1;
     }
-    body.dark .border-dashed, .force-dark .border-dashed { border-style: dashed; }
-    body.dark .border-black\\/20, .force-dark .border-black\\/20 { border-color: rgba(255,255,255,0.25); }
-    body.dark .border-white, .force-dark .border-white { border-color: #fff; }
+    .force-dark .border-dashed { border-style: dashed; }
+    .force-dark .border-black\\/20 { border-color: rgba(255,255,255,0.25); }
+    .force-dark .border-white { border-color: #fff; }
 
-    body.dark .bg-black, .force-dark .bg-black { background: var(--grad); color: #000; }
-    body.dark .text-black, .force-dark .text-black { color: #fff; }
-    body.dark .text-white, .force-dark .text-white { color: #000; }
+    .force-dark .bg-black { background: var(--grad); color: #000; }
+    .force-dark .text-black { color: #fff; }
+    .force-dark .text-white { color: #000; }
 
-    body.dark .hover\\:bg-black:hover, .force-dark .hover\\:bg-black:hover { background: var(--grad); color: #000; }
-    body.dark .hover\\:text-white:hover, .force-dark .hover\\:text-white:hover { color: #000; }
-    body.dark .hover\\:bg-black\\/5:hover, .force-dark .hover\\:bg-black\\/5:hover { background: rgba(255,255,255,0.06); }
+    .force-dark .hover\\:bg-black:hover { background: var(--grad); color: #000; }
+    .force-dark .hover\\:text-white:hover { color: #000; }
+    .force-dark .hover\\:bg-black\\/5:hover { background: rgba(255,255,255,0.06); }
 
-    body.dark .bg-white, .force-dark .bg-white { background: rgba(255,255,255,0.08); }
-    body.dark .bg-white\\/40, .force-dark .bg-white\\/40 { background: rgba(255,255,255,0.1); }
-    body.dark .bg-white\\/50, .force-dark .bg-white\\/50 { background: rgba(255,255,255,0.12); }
-    body.dark .bg-white\\/60, .force-dark .bg-white\\/60 { background: rgba(255,255,255,0.15); }
+    .force-dark .bg-white { background: rgba(255,255,255,0.08); }
+    .force-dark .bg-white\\/40 { background: rgba(255,255,255,0.1); }
+    .force-dark .bg-white\\/50 { background: rgba(255,255,255,0.12); }
+    .force-dark .bg-white\\/60 { background: rgba(255,255,255,0.15); }
     .holo-bg-contained {
       background: rgba(255, 255, 255, 0.75);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
     }
-    body.dark .holo-bg-contained {
-      background: rgba(5, 5, 5, 0.9);
-    }
-    /* Force-dark (drawer): always 95% black, fully opaque, regardless of theme */
+    /* Drawer panel: solid 95% black */
     .force-dark.holo-bg-contained,
     .force-dark .holo-bg-contained {
       background: #0d0d0d;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
     }
-    /* Drawer is always dark — its container has class "force-dark" */
     .force-dark { color: #fff; }
-
-    body.dark input, body.dark textarea, body.dark select,
     .force-dark input, .force-dark textarea, .force-dark select { color: #fff; }
-    body.dark .placeholder\\:text-black\\/40::placeholder,
     .force-dark .placeholder\\:text-black\\/40::placeholder { color: rgba(255,255,255,0.4); }
 
     input, textarea, select, button { font-family: inherit; }
@@ -150,15 +145,9 @@ const GlobalStyles = () => (
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
 
-    /* Sticky chrome backdrop — used by sticky calendar strips and section headings.
-       Theme-aware (matches body bg in both modes), with a touch of blur. */
+    /* Sticky chrome backdrop — solid white when bars become pinned. */
     .sticky-bar {
-      background: rgba(242, 236, 255, 0.88);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-    }
-    body.dark .sticky-bar {
-      background: rgba(13, 13, 13, 0.88);
+      background: #ffffff;
     }
 
     /* Monochrome map — Google Maps embed gets desaturated to match aesthetic.
@@ -173,7 +162,7 @@ const GlobalStyles = () => (
       font-variant-emoji: text;
       filter: grayscale(1) contrast(1.05);
     }
-    body.dark .emoji-mono, .force-dark .emoji-mono {
+    .force-dark .emoji-mono {
       filter: grayscale(1) contrast(1.05) invert(1);
     }
 
@@ -242,6 +231,8 @@ const AnimatedBackground = ({ animated = true }) => (
     <div className="blob blob-2" />
     <div className="blob blob-3" />
     <div className="blob blob-4" />
+    <div className="blob blob-5" />
+    <div className="blob blob-6" />
   </div>
 );
 
@@ -280,7 +271,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 // Uses Intl.Segmenter where available (modern browsers) to handle emoji with
 // ZWJ joiners and skin tone modifiers correctly. Falls back to naive char
 // truncation otherwise.
-const truncateGraphemes = (str, max = 2) => {
+const truncateGraphemes = (str, max = 1) => {
   if (!str) return "";
   try {
     if (typeof Intl !== "undefined" && Intl.Segmenter) {
@@ -707,7 +698,7 @@ const NAV_ITEMS = [
   { id: "admin", label: "Admin", adminOnly: true },
 ];
 
-const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, onLogout, theme, onToggleTheme, forceDark = false }) => {
+const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, onLogout, forceDark = false }) => {
   const items = NAV_ITEMS.filter(it => {
     if (it.adminOnly && user.role !== "admin") return false;
     if (it.id === "goscie" && user.role !== "admin" && !guestListVisible) return false;
@@ -758,12 +749,6 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
             );
           })}
         </nav>
-        {/* Theme toggle — always visible */}
-        <button onClick={onToggleTheme}
-          className={`border ${borderColor} w-11 h-11 flex items-center justify-center text-lg shrink-0 transition-colors ml-auto lg:ml-0 ${buttonHover}`}
-          aria-label="Toggle theme">
-          {theme === "dark" ? "☀" : "☾"}
-        </button>
         {/* Desktop logout */}
         <button onClick={onLogout}
           className={`hidden lg:inline-flex font-display text-xs px-4 py-2 border ${borderColor} shrink-0 transition-colors ${buttonHover}`}>
@@ -771,7 +756,7 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
         </button>
         {/* Mobile hamburger */}
         <button onClick={onMenuOpen}
-          className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 transition-colors ${buttonHover}`}
+          className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 ml-auto transition-colors ${buttonHover}`}
           aria-label="Menu">
           <div className="space-y-1.5">
             <div className={`w-5 h-0.5 ${barColor}`} />
@@ -784,7 +769,7 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
   );
 };
 
-const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible, onLogout, theme, onToggleTheme }) => {
+const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible, onLogout }) => {
   if (!open) return null;
   const items = NAV_ITEMS.filter(it => {
     if (it.drawerFooter) return false; // shown separately as avatar block
@@ -808,13 +793,6 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
             </button>
           ))}
         </nav>
-        <div className="px-5 py-5 border-t border-black mt-4 flex items-center justify-between gap-3">
-          <div className="font-mono text-xs uppercase tracking-widest opacity-70">Motyw</div>
-          <button onClick={onToggleTheme}
-            className="font-display text-xs px-4 py-2 border border-black hover:bg-black hover:text-white">
-            {theme === "dark" ? "☀ Jasny" : "☾ Ciemny"}
-          </button>
-        </div>
         {/* Profile entry — avatar + name + logout */}
         <div className="border-t border-black">
           <button onClick={() => { onNavigate("profile"); onClose(); }}
@@ -1428,16 +1406,6 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate }) => {
   );
 };
 
-// Reusable theme toggle button
-const ThemeToggle = ({ theme, onToggle, className = "" }) => (
-  <button onClick={onToggle}
-    className={`border border-black w-11 h-11 flex items-center justify-center text-lg shrink-0 hover:bg-black hover:text-white transition-colors ${className}`}
-    aria-label="Toggle theme" title={theme === "dark" ? "Tryb jasny" : "Tryb ciemny"}>
-    {theme === "dark" ? "☀" : "☾"}
-  </button>
-);
-
-
 // ============================================================
 // STACJE KOSMICZNE VIEW
 // ============================================================
@@ -1516,7 +1484,7 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
       {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
         : items.length === 0 ? <EmptyState message="Brak stacji" />
         : (
-          <div className="px-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="px-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
             {items.map(it => {
               // Mystery view = hidden visibility, and the viewer isn't admin or owner
               const isOwner = it.owners?.includes(user.id);
@@ -1559,14 +1527,18 @@ const visibilityLabel = (v) => ({
 }[v] || v);
 
 const StacjaCard = ({ item, users, mystery, onClick }) => {
-  // Mystery view: card looks intriguing but reveals no actual content
+  // Mystery card uses the exact same horizontal structure as a regular card —
+  // 🔒 emoji on the left, "???" title and a generic description on the right.
   if (mystery) {
     return (
-      <Card onClick={onClick} className="overflow-hidden flex flex-col items-center justify-center p-8 min-h-[200px] text-center">
-        <div className="text-5xl emoji-mono mb-4">🔒</div>
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
-        <h3 className="font-display text-2xl">???</h3>
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-50 mt-3">Wkrótce</div>
+      <Card onClick={onClick} className="overflow-hidden flex">
+        <div className="w-28 sm:w-32 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
+          <span className="text-5xl sm:text-6xl emoji-mono">🔒</span>
+        </div>
+        <div className="p-4 flex-1 min-w-0 flex flex-col justify-center">
+          <h3 className="font-display text-lg mb-1 leading-tight">???</h3>
+          <p className="text-sm opacity-80">Stacja kosmiczna ukryta</p>
+        </div>
       </Card>
     );
   }
@@ -1580,7 +1552,7 @@ const StacjaCard = ({ item, users, mystery, onClick }) => {
   //   hasDate + date  → formal date/time
   //   hasDate + suggestion (no date) → "Sugestia: <text>"
   //   hasDate + nothing → "Data do ustalenia"
-  //   !hasDate (legacy: no flag, no date) → no row
+  //   !hasDate → no row
   const hasDate = item.hasDate || !!item.date;
   let dateLine = null;
   if (hasDate) {
@@ -1589,17 +1561,26 @@ const StacjaCard = ({ item, users, mystery, onClick }) => {
     else dateLine = "Data do ustalenia";
   }
 
+  // Thumbnail: prefer image, fall back to a large emoji. Skip the slot only
+  // when neither is set (rare).
+  const hasThumbnail = item.image || item.icon;
+
   return (
-    <Card onClick={onClick} className="overflow-hidden flex flex-col">
-      {item.image && <img src={item.image} alt="" className="w-full h-36 object-cover border-b border-black" />}
-      <div className="p-4 flex-1 flex flex-col">
+    <Card onClick={onClick} className="overflow-hidden flex">
+      {hasThumbnail && (
+        <div className="w-28 sm:w-32 shrink-0 border-r border-black flex items-center justify-center overflow-hidden bg-black/5">
+          {item.image
+            ? <img src={item.image} alt="" className="w-full h-full object-cover" />
+            : <span className="text-5xl sm:text-6xl emoji-mono">{item.icon}</span>
+          }
+        </div>
+      )}
+      <div className="p-4 flex-1 min-w-0 flex flex-col">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
           {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{dateLine}</span>}
         </div>
-        <h3 className="font-display text-lg mb-1 leading-tight">
-          {item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
-        </h3>
+        <h3 className="font-display text-lg mb-1 leading-tight">{item.title}</h3>
         {item.description && <p className="text-sm opacity-80 line-clamp-2 mb-2">{item.description}</p>}
         <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-auto">
           {ownerNames}{item.owners?.length > 3 && ` +${item.owners.length - 3}`}
@@ -1665,7 +1646,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
               {form.icon || "·"}
             </div>
             <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
-              onChange={e => update("icon", truncateGraphemes(e.target.value, 2))} maxLength={8} />
+              onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
           </div>
         </div>
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
@@ -2784,7 +2765,7 @@ const TransportFormModal = ({ open, onClose, onSave }) => {
               {form.emoji || "·"}
             </div>
             <Input className="flex-1" placeholder="Wpisz emoji" value={form.emoji}
-              onChange={e => update("emoji", truncateGraphemes(e.target.value, 2))} maxLength={8} />
+              onChange={e => update("emoji", truncateGraphemes(e.target.value, 1))} maxLength={8} />
           </div>
         </div>
         <Input label="Nazwa" value={form.name} onChange={e => update("name", e.target.value)}
@@ -2976,7 +2957,7 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
               {form.icon || "·"}
             </div>
             <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
-              onChange={e => update("icon", truncateGraphemes(e.target.value, 2))} maxLength={8} />
+              onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
           </div>
         </div>
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
@@ -3303,7 +3284,7 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
 // ============================================================
 // PROFILE VIEW
 // ============================================================
-const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onToggleTheme }) => {
+const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
   const [form, setForm] = useState({
     firstName: user.firstName || "", lastName: user.lastName || "",
     username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null
@@ -3378,18 +3359,6 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onTogg
         <Input label="Nazwa użytkownika" value={form.username} onChange={e => update("username", e.target.value)} />
         <div className="border-t border-black pt-5 space-y-3">
           <div className="font-mono text-xs uppercase tracking-widest opacity-70">Wygląd</div>
-          <div className="flex items-center justify-between gap-3 py-1">
-            <div className="min-w-0">
-              <div className="text-sm">Tryb ciemny</div>
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-0.5">
-                {theme === "dark" ? "Włączony" : "Wyłączony"}
-              </div>
-            </div>
-            <button type="button" onClick={onToggleTheme}
-              className="font-display text-xs px-4 py-2 border border-black hover:bg-black hover:text-white shrink-0">
-              {theme === "dark" ? "☀ Jasny" : "☾ Ciemny"}
-            </button>
-          </div>
           <div className="flex items-center justify-between gap-3 py-1">
             <div className="min-w-0">
               <div className="text-sm">Animowane tło</div>
@@ -3634,13 +3603,6 @@ export default function App() {
     return seg || "home";
   };
   const view = pathToView(location.pathname);
-  const [theme, setTheme] = useState(() => {
-    try {
-      const saved = localStorage.getItem("campbau:theme");
-      if (saved === "dark" || saved === "light") return saved;
-    } catch {}
-    return "light";
-  });
 
   const [animated, setAnimated] = useState(() => {
     try {
@@ -3650,19 +3612,11 @@ export default function App() {
     return true;
   });
 
-  // Toggle .dark class on body whenever theme changes
-  useEffect(() => {
-    document.body.classList.toggle("dark", theme === "dark");
-    try { localStorage.setItem("campbau:theme", theme); } catch {}
-    return () => { document.body.classList.remove("dark"); };
-  }, [theme]);
-
   // Persist animated preference
   useEffect(() => {
     try { localStorage.setItem("campbau:animated", animated ? "true" : "false"); } catch {}
   }, [animated]);
 
-  const toggleTheme = () => setTheme(t => t === "dark" ? "light" : "dark");
   const toggleAnimated = () => setAnimated(a => !a);
 
   // Initialize default admin, settings, demo data
@@ -3844,7 +3798,6 @@ export default function App() {
         <Header user={user} guestListVisible={guestListVisible}
           currentView={view} onNavigate={navigate}
           onMenuOpen={() => setDrawerOpen(true)} onLogout={onLogout}
-          theme={theme} onToggleTheme={toggleTheme}
           forceDark={view === "home"} />
         {/* Hero — only on home. Full document width (avoids 100vw/scrollbar issues on
             iOS Safari). Pulled up under the 80px sticky header with -mt-20.
@@ -3881,8 +3834,7 @@ export default function App() {
             <Route path="/miejsce" element={<MiejsceView user={user} onUpdate={onUpdateUser} />} />
             <Route path="/profil" element={
               <ProfileView user={user} onUpdate={onUpdateUser}
-                animated={animated} onToggleAnimated={toggleAnimated}
-                theme={theme} onToggleTheme={toggleTheme} />
+                animated={animated} onToggleAnimated={toggleAnimated} />
             } />
             <Route path="/goscie" element={
               user.role === "admin" || guestListVisible
@@ -3900,8 +3852,7 @@ export default function App() {
         </main>
         <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
           currentView={view} onNavigate={navigate} user={user}
-          guestListVisible={guestListVisible} onLogout={onLogout}
-          theme={theme} onToggleTheme={toggleTheme} />
+          guestListVisible={guestListVisible} onLogout={onLogout} />
       </div>
       <ErrorToast />
     </>

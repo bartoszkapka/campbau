@@ -155,6 +155,17 @@ const GlobalStyles = () => (
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
 
+    /* Sticky chrome backdrop — used by sticky calendar strips and section headings.
+       Theme-aware (matches body bg in both modes), with a touch of blur. */
+    .sticky-bar {
+      background: rgba(242, 236, 255, 0.88);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    body.dark .sticky-bar {
+      background: rgba(13, 13, 13, 0.88);
+    }
+
     /* Monochrome map — Google Maps embed gets desaturated to match aesthetic.
        Filter is applied to the rendered output (cross-origin iframe is fine). */
     .map-iframe {
@@ -1809,24 +1820,64 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
     load();
   };
 
+  // Track if a click-driven scroll is in progress, so the IntersectionObserver
+  // doesn't fight it. We re-enable IO updates after a short delay.
+  const userScrollLockRef = useRef(false);
+
   const scrollToDay = (dateStr) => {
+    userScrollLockRef.current = true;
     setSelectedDate(dateStr);
     const target = sectionRefs.current[dateStr];
     if (target) {
-      // Scroll page so section header sits below the sticky header (80) + calendar strip (~80)
+      // Scroll page so section header sits below: main header (80) + calendar (~80)
       const y = target.getBoundingClientRect().top + window.scrollY - 170;
       window.scrollTo({ top: y, behavior: "smooth" });
     }
-    // Center the selected calendar tile within the strip
-    const cal = calendarRef.current;
-    if (cal) {
-      const tile = cal.querySelector(`[data-date="${dateStr}"]`);
-      if (tile) {
-        const desired = tile.offsetLeft - (cal.clientWidth - tile.offsetWidth) / 2;
-        cal.scrollTo({ left: Math.max(0, desired), behavior: "smooth" });
-      }
-    }
+    // Re-enable IO-driven updates after the smooth scroll finishes
+    setTimeout(() => { userScrollLockRef.current = false; }, 700);
   };
+
+  // Whenever selectedDate changes (from click OR scroll-spy), keep the
+  // corresponding tile centered in the calendar strip.
+  useEffect(() => {
+    if (!selectedDate) return;
+    const cal = calendarRef.current;
+    if (!cal) return;
+    const tile = cal.querySelector(`[data-date="${selectedDate}"]`);
+    if (!tile) return;
+    const desired = tile.offsetLeft - (cal.clientWidth - tile.offsetWidth) / 2;
+    cal.scrollTo({ left: Math.max(0, desired), behavior: "smooth" });
+  }, [selectedDate]);
+
+  // Scroll-spy: as the user scrolls the page, track which day section is
+  // currently in view and update selectedDate.
+  useEffect(() => {
+    if (dateKeys.length === 0) return;
+    const intersecting = new Set();
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const date = entry.target.getAttribute("data-date");
+        if (!date) return;
+        if (entry.isIntersecting) intersecting.add(date);
+        else intersecting.delete(date);
+      });
+      if (userScrollLockRef.current) return;
+      if (intersecting.size === 0) return;
+      // Pick the topmost (earliest) intersecting section
+      const sorted = [...intersecting].sort();
+      setSelectedDate(sorted[0]);
+    }, {
+      // Active zone: between sticky chrome bottom (~160px) and ~50% viewport.
+      // The first section whose top crosses into that band is "current".
+      rootMargin: "-160px 0px -50% 0px",
+      threshold: 0
+    });
+    dateKeys.forEach(d => {
+      const el = sectionRefs.current[d];
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [dateKeys.join(",")]);  // eslint-disable-line
 
   // Format helpers for calendar tile
   const fmtWeekday = (dStr) => new Date(dStr + "T12:00").toLocaleDateString("pl-PL", { weekday: "short" }).replace(".", "");
@@ -1843,11 +1894,12 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
         subtitle={`${combined.length} ${combined.length === 1 ? "wydarzenie" : "wydarzeń"}`}
         action={isAdmin && <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Dodaj</Button>} />
 
-      {/* Day calendar strip — only when there are dated events */}
+      {/* Day calendar strip — sticky at the top of the viewport, below the main header.
+          Reflects which day section is currently in view via scroll-spy. */}
       {dateKeys.length > 0 && (
-        <div className="mb-6">
+        <div className="sticky top-20 z-20 sticky-bar mb-6 border-b border-black/10">
           <div ref={calendarRef}
-            className="overflow-x-auto no-scrollbar px-5"
+            className="overflow-x-auto no-scrollbar px-5 py-2"
             style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
             <div className="flex gap-2" style={{ width: "max-content" }}>
               {dateKeys.map(dateStr => {
@@ -1874,8 +1926,9 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
             {dateKeys.map(dateStr => (
               <section key={dateStr}
                 ref={(el) => { sectionRefs.current[dateStr] = el; }}
+                data-date={dateStr}
                 className="scroll-mt-44 mb-8">
-                <h2 className="font-display text-lg uppercase mb-3 sticky top-20 z-10 backdrop-blur bg-white/40 dark:bg-black/40 -mx-5 px-5 py-2 border-b border-black/10">
+                <h2 className="font-display text-lg uppercase mb-3 sticky top-40 z-10 sticky-bar -mx-5 px-5 py-2 border-b border-black/10">
                   {fmtSectionDate(dateStr)}
                 </h2>
                 <div className="space-y-3">
@@ -2589,6 +2642,9 @@ const FestiwalView = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [activeSectionId, setActiveSectionId] = useState(null);
+  const navRef = useRef(null);
+  const userScrollLockRef = useRef(false);
   const isAdmin = user.role === "admin";
 
   const load = async () => {
@@ -2622,8 +2678,50 @@ const FestiwalView = ({ user }) => {
   };
 
   const scrollTo = (id) => {
+    userScrollLockRef.current = true;
+    setActiveSectionId(id);
     document.getElementById("section-" + id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => { userScrollLockRef.current = false; }, 700);
   };
+
+  // Scroll-spy: highlight the section currently in view
+  useEffect(() => {
+    if (sections.length === 0) return;
+    const intersecting = new Set();
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const id = entry.target.id.replace(/^section-/, "");
+        if (!id) return;
+        if (entry.isIntersecting) intersecting.add(id);
+        else intersecting.delete(id);
+      });
+      if (userScrollLockRef.current) return;
+      if (intersecting.size === 0) return;
+      // Pick the topmost intersecting section in document order
+      const order = sections.map(s => s.id);
+      const sorted = [...intersecting].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      setActiveSectionId(sorted[0]);
+    }, {
+      // Active band = below the sticky nav (~140px) to mid-viewport
+      rootMargin: "-140px 0px -50% 0px",
+      threshold: 0
+    });
+    sections.forEach(s => {
+      const el = document.getElementById("section-" + s.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [sections.map(s => s.id).join(",")]);  // eslint-disable-line
+
+  // Auto-center the active button in the nav strip
+  useEffect(() => {
+    if (!activeSectionId || !navRef.current) return;
+    const btn = navRef.current.querySelector(`[data-section-id="${activeSectionId}"]`);
+    if (!btn) return;
+    const cont = navRef.current;
+    const desired = btn.offsetLeft - (cont.clientWidth - btn.offsetWidth) / 2;
+    cont.scrollTo({ left: Math.max(0, desired), behavior: "smooth" });
+  }, [activeSectionId]);
 
   return (
     <div className="pb-20">
@@ -2633,14 +2731,20 @@ const FestiwalView = ({ user }) => {
         : sections.length === 0 ? <EmptyState message="Brak sekcji" />
         : (
           <>
-            <div className="sticky top-20 z-20 backdrop-blur border-y border-black overflow-x-auto no-scrollbar">
+            <div ref={navRef} className="sticky top-20 z-20 sticky-bar border-y border-black overflow-x-auto no-scrollbar"
+              style={{ touchAction: "pan-x pan-y" }}>
               <div className="flex gap-2 px-5 py-3 whitespace-nowrap">
-                {sections.map(s => (
-                  <button key={s.id} onClick={() => scrollTo(s.id)}
-                    className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-1.5 hover:bg-black hover:text-white">
-                    <span className="mr-1 emoji-mono">{s.icon}</span>{s.title}
-                  </button>
-                ))}
+                {sections.map(s => {
+                  const isActive = s.id === activeSectionId;
+                  return (
+                    <button key={s.id} data-section-id={s.id} onClick={() => scrollTo(s.id)}
+                      className={`font-mono text-xs uppercase tracking-widest border border-black px-3 py-1.5 transition-colors ${
+                        isActive ? "bg-black text-white" : "hover:bg-black/5"
+                      }`}>
+                      <span className="mr-1 emoji-mono">{s.icon}</span>{s.title}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="px-5 space-y-10 pt-6">

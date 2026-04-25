@@ -15,6 +15,7 @@ const GlobalStyles = () => (
       color: #0d0d0d;
       background: #f2ecff;
       overscroll-behavior: none;
+      font-variant-emoji: text;
     }
     body.dark { background: #050505; color: #fff; }
     /* Wrap the entire app in a horizontal overflow guard rather than the body,
@@ -170,12 +171,15 @@ const GlobalStyles = () => (
       filter: grayscale(1) contrast(1.05) invert(1);
     }
 
-    /* Hero — image keeps its aspect ratio (no vertical cropping). Height is fixed,
+    /* Hero — image covers the box on every viewport size. On wide screens, image
+       scales up to fill horizontally (small vertical crop is OK). On narrower
+       screens, image fills height with horizontal sides cropped. +8px overhang
+       on every side prevents Safari sub-pixel gradient bleed at the edges. */
     .hero-wrapper {
       height: 580px;
     }
     @media (max-width: 768px) {
-      .hero-wrapper { height: 480px; }
+      .hero-wrapper { height: 460px; }
     }
     .hero-inner {
       position: absolute;
@@ -183,12 +187,12 @@ const GlobalStyles = () => (
     }
     .hero-inner img {
       position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      height: 100%;
-      width: auto;
+      top: -8px;
+      left: -8px;
+      width: calc(100% + 16px);
+      height: calc(100% + 16px);
+      object-fit: cover;
+      object-position: center;
       max-width: none;
     }
 
@@ -202,6 +206,10 @@ const GlobalStyles = () => (
     .prose-simple p:last-child { margin-bottom: 0; }
     .prose-simple strong { font-weight: 700; }
     .prose-simple em { font-style: italic; }
+
+    /* O Festiwalu — generous line spacing for readability */
+    .festiwal-prose { line-height: 1.7; }
+    .festiwal-prose p { margin: 0 0 1.25em 0; }
 
     .spinner {
       width: 24px; height: 24px;
@@ -1132,7 +1140,7 @@ const PwaInstallBanner = () => {
   return (
     <>
       <div className="border border-black p-4 mb-6 flex items-center gap-4">
-        <div className="text-3xl shrink-0">📲</div>
+        <div className="text-3xl shrink-0 emoji-mono">📲</div>
         <div className="flex-1 min-w-0">
           <div className="font-display text-base">Zainstaluj aplikację</div>
           <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-0.5">
@@ -1147,18 +1155,19 @@ const PwaInstallBanner = () => {
           </button>
         </div>
       </div>
-      {/* iOS install instructions overlay */}
+      {/* iOS install instructions overlay — iOS 26 flow with new share menu */}
       {showIosHint && (
         <Modal open={showIosHint} onClose={() => setShowIosHint(false)} title="Jak zainstalować">
           <div className="space-y-4 text-sm">
-            <p>Na iPhone / iPad:</p>
-            <ol className="space-y-2 list-decimal list-inside">
-              <li>Stuknij ikonę <strong>Udostępnij</strong> u dołu ekranu (kwadrat ze strzałką w górę).</li>
-              <li>Przewiń i wybierz <strong>"Do ekranu początkowego"</strong>.</li>
+            <p>Na iPhone / iPad (iOS 26 i nowsze):</p>
+            <ol className="space-y-2.5 list-decimal list-inside">
+              <li>W Safari stuknij ikonę <strong>Udostępnij</strong> (kwadrat ze strzałką w górę). W nowym układzie pasek adresu jest na dole — ikonę znajdziesz w jego prawej części, lub w menu trzech kropek po prawej.</li>
+              <li>W panelu wyboru wybierz <strong>"Do ekranu początkowego"</strong>.</li>
+              <li>Upewnij się, że przełącznik <strong>"Otwórz jako aplikację"</strong> jest włączony (zielony) — domyślnie jest.</li>
               <li>Stuknij <strong>"Dodaj"</strong> w prawym górnym rogu.</li>
             </ol>
             <p className="font-mono text-[10px] uppercase tracking-widest opacity-60 pt-2">
-              Aplikacja pojawi się jako ikona obok innych — będziesz ją otwierać bez paska Safari.
+              Aplikacja pojawi się obok innych ikon i otworzy się bez paska przeglądarki — w trybie pełnoekranowym.
             </p>
             <Button onClick={() => setShowIosHint(false)} className="w-full">OK</Button>
           </div>
@@ -1330,7 +1339,7 @@ const StacjeIntroModal = ({ open, onClose, initial, onSave }) => {
 const visibilityLabel = (v) => ({
   public: "Publiczna",
   hidden: "Ukryta",
-  host: "Tylko host",
+  host: "Dla organizatora",
 }[v] || v);
 
 const StacjaCard = ({ item, users, onClick }) => {
@@ -1346,7 +1355,9 @@ const StacjaCard = ({ item, users, onClick }) => {
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{formatDate(item.date, item.time)}</span>}
         </div>
-        <h3 className="font-display text-lg mb-1 leading-tight">{item.title}</h3>
+        <h3 className="font-display text-lg mb-1 leading-tight">
+          {item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
+        </h3>
         {item.description && <p className="text-sm opacity-80 line-clamp-2 mb-2">{item.description}</p>}
         <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-auto">
           {ownerNames}{item.owners?.length > 3 && ` +${item.owners.length - 3}`}
@@ -1357,14 +1368,15 @@ const StacjaCard = ({ item, users, onClick }) => {
 };
 
 const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
-  const [form, setForm] = useState({ title: "", description: "", image: null, date: "", time: "", visibility: "public" });
+  const [form, setForm] = useState({ title: "", description: "", image: null, date: "", time: "", visibility: "public", icon: "" });
   useEffect(() => {
     if (open) {
       setForm(editing ? {
         title: editing.title || "", description: editing.description || "",
         image: editing.image || null, date: editing.date || "", time: editing.time || "",
-        visibility: editing.visibility || "public"
-      } : { title: "", description: "", image: null, date: "", time: "", visibility: "public" });
+        visibility: editing.visibility || "public",
+        icon: editing.icon || ""
+      } : { title: "", description: "", image: null, date: "", time: "", visibility: "public", icon: "" });
     }
   }, [open, editing]);
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
@@ -1374,12 +1386,23 @@ const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
     onSave({
       title: form.title.trim(), description: form.description.trim(),
       image: form.image, date: form.date || null, time: form.time || null,
-      visibility: form.visibility
+      visibility: form.visibility,
+      icon: form.icon.trim() || null
     });
   };
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj stację" : "Nowa stacja"}>
       <form onSubmit={submit} className="space-y-4">
+        <div>
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Emoji</span>
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 border border-black flex items-center justify-center text-3xl emoji-mono shrink-0">
+              {form.icon || "·"}
+            </div>
+            <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
+              onChange={e => update("icon", e.target.value)} maxLength={4} />
+          </div>
+        </div>
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
@@ -1393,7 +1416,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
             {[
               { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
               { value: "hidden", title: "Ukryta", desc: "Tylko dla organizatorów" },
-              { value: "host", title: "Tylko host", desc: "Widoczna dla adminów" },
+              { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna dla adminów" },
             ].map(opt => {
               const selected = form.visibility === opt.value;
               return (
@@ -1494,7 +1517,9 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">{item.title}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
+          {item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
+        </h1>
         {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
       </div>
       <div className="mx-5 border-t border-black pt-5 mb-5">
@@ -1713,7 +1738,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
-                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">🚌 Kosmobus</span>}
+                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
                             {it.time && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{it.time.slice(0, 5)}</span>}
                           </div>
                           <div className="flex items-start justify-between gap-3 flex-1">
@@ -1748,7 +1773,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         )}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2">🚌 Kosmobus</span>}
+                            {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2"><span className="emoji-mono">🚌</span> Kosmobus</span>}
                             <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
                             {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
                           </div>
@@ -1805,7 +1830,7 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
           <button type="button" onClick={() => update("kosmobusEnabled", !form.kosmobusEnabled)}
             className={`w-full text-left border px-4 py-3 transition-colors ${form.kosmobusEnabled ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
             <div className="flex items-center gap-2">
-              <span className="text-base">🚌</span>
+              <span className="text-base emoji-mono">🚌</span>
               <span className="font-display text-sm">Kosmobus {form.kosmobusEnabled && "— włączony"}</span>
             </div>
             <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.kosmobusEnabled ? "opacity-80" : "opacity-60"}`}>
@@ -1913,7 +1938,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
-          {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">🚌 Kosmobus</span>}
+          {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">{item.title}</h1>
         {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
@@ -1925,7 +1950,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
           <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl">🚌</span>
+                <span className="text-2xl emoji-mono">🚌</span>
                 <h2 className="font-display text-xl">Kosmobus</h2>
               </div>
               <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
@@ -2062,13 +2087,13 @@ const FestiwalView = ({ user }) => {
                 ))}
               </div>
             </div>
-            <div className="px-5 space-y-8 pt-6">
+            <div className="px-5 space-y-10 pt-6">
               {sections.map((s, idx) => (
                 <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
-                  <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="text-3xl emoji-mono">{s.icon}</div>
-                      <h2 className="font-display text-2xl font-bold uppercase">{s.title}</h2>
+                      <div className="text-4xl emoji-mono">{s.icon}</div>
+                      <h2 className="font-display text-3xl font-bold uppercase leading-tight">{s.title}</h2>
                     </div>
                     {isAdmin && (
                       <div className="flex gap-1 shrink-0">
@@ -2082,7 +2107,7 @@ const FestiwalView = ({ user }) => {
                     )}
                   </div>
                   {s.photo && <img src={s.photo} alt="" className="w-full max-h-80 object-cover border border-black mb-4" />}
-                  {s.content && <div className="prose-simple text-base">{renderRichText(s.content)}</div>}
+                  {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
                 </section>
               ))}
             </div>
@@ -2093,8 +2118,6 @@ const FestiwalView = ({ user }) => {
     </div>
   );
 };
-
-const ICON_OPTIONS = ["✨", "🌙", "☀️", "🪐", "🚀", "🌌", "🔭", "⚡", "☄️", "⭐", "🎪", "🎨", "🎵", "🎬", "📚", "🍴", "🌿", "🔥", "💫", "🌠", "🛸", "🌍", "🪩", "🎭", "🥁", "🎤", "📷", "🗺️"];
 
 const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
   const [form, setForm] = useState({ icon: "✨", title: "", content: "", photo: null });
@@ -2114,16 +2137,14 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj sekcję" : "Nowa sekcja"}>
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Ikona</span>
-          <div className="grid grid-cols-7 gap-1">
-            {ICON_OPTIONS.map(ic => (
-              <button key={ic} type="button" onClick={() => update("icon", ic)}
-                className={`aspect-square text-xl border border-black emoji-mono ${form.icon === ic ? "bg-black text-white" : "bg-transparent"}`}>
-                {ic}
-              </button>
-            ))}
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Emoji</span>
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 border border-black flex items-center justify-center text-3xl emoji-mono shrink-0">
+              {form.icon || "·"}
+            </div>
+            <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
+              onChange={e => update("icon", e.target.value)} maxLength={4} />
           </div>
-          <Input className="mt-2" placeholder="Lub wpisz własną (emoji)" value={form.icon} onChange={e => update("icon", e.target.value)} maxLength={2} />
         </div>
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Treść (rich text)" value={form.content} onChange={e => update("content", e.target.value)} rows={7} />

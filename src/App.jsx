@@ -57,11 +57,11 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(50px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 17s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 20s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 16s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 18s ease-in-out infinite alternate; }
-    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 14s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 14s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 17s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 13s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 15s ease-in-out infinite alternate; }
+    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 12s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0% { transform: translate(0,0) scale(1); }
@@ -154,10 +154,17 @@ const GlobalStyles = () => (
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
 
+    /* Render colored emojis as monochrome — best effort with grayscale + contrast.
+       Use font-variant-emoji where supported (modern Chrome/Firefox) for crisper text-style. */
+    .emoji-mono {
+      font-variant-emoji: text;
+      filter: grayscale(1) contrast(1.05);
+    }
+    body.dark .emoji-mono, .force-dark .emoji-mono {
+      filter: grayscale(1) contrast(1.05) invert(1);
+    }
+
     /* Hero — image keeps its aspect ratio (no vertical cropping). Height is fixed,
-       width follows naturally from aspect; on narrow screens the image overflows
-       horizontally and gets clipped by the wrapper. On wide screens, animated
-       gradient peeks through on the sides. */
     .hero-wrapper {
       height: 580px;
     }
@@ -335,11 +342,11 @@ const seedDemoData = async () => {
 
     // O Festiwalu sections
     const sections = [
-      { icon: "✧", title: "Koncept", content: "Camp Bau to mały, prywatny festiwal dla grupki przyjaciół.\n\nNie organizujemy go dla zysku, nie sprzedajemy biletów, nie zapraszamy gwiazd. Zapraszamy **siebie nawzajem**. To wszystko.\n\nTrzy dni, jedna łąka, jedno niebo." },
-      { icon: "☽", title: "Zasady", content: "**1.** Jeśli coś przynosisz, po sobie sprzątasz.\n\n**2.** Każdy pomysł jest dobry, dopóki nie psuje nikomu niczego.\n\n**3.** Telefon w kieszeni, chyba że robisz zdjęcie — wtedy udostępnij grupie.\n\n**4.** Nie musisz nic. Serio, *nic*." },
-      { icon: "☄", title: "Co zabrać", content: "Śpiwór, ciepłą bluzę na wieczór, butelkę na wodę, coś do stołu (słodkiego albo słonego, obojętnie).\n\nDla chętnych: instrument, książkę do czytania w cieniu, coś, co chcesz pokazać innym, latarkę czołówkę." },
-      { icon: "☉", title: "Jedzenie", content: "Kuchnia festiwalowa gotuje dwa posiłki dziennie — śniadanie i obiad. Kolacja jest wspólna, z tego co przywieziemy.\n\nJest roślinnie. Jeśli masz alergię lub specjalną dietę, napisz do gospodarza przed przyjazdem." },
-      { icon: "❂", title: "FAQ", content: "**Czy mogę przyjechać z psem?** Tak, jeśli jest spokojny z ludźmi i innymi zwierzętami.\n\n**Czy będzie prąd?** Tak, ale niezawodnie raczej nie. Powerbank mile widziany.\n\n**Czy będzie sieć?** Słaba. I to jest jedna z najlepszych cech tego miejsca.\n\n**Czy mogę zaprosić znajomego?** Najpierw zapytaj bau." },
+      { icon: "✨", title: "Koncept", content: "Camp Bau to mały, prywatny festiwal dla grupki przyjaciół.\n\nNie organizujemy go dla zysku, nie sprzedajemy biletów, nie zapraszamy gwiazd. Zapraszamy **siebie nawzajem**. To wszystko.\n\nTrzy dni, jedna łąka, jedno niebo." },
+      { icon: "🌙", title: "Zasady", content: "**1.** Jeśli coś przynosisz, po sobie sprzątasz.\n\n**2.** Każdy pomysł jest dobry, dopóki nie psuje nikomu niczego.\n\n**3.** Telefon w kieszeni, chyba że robisz zdjęcie — wtedy udostępnij grupie.\n\n**4.** Nie musisz nic. Serio, *nic*." },
+      { icon: "🎒", title: "Co zabrać", content: "Śpiwór, ciepłą bluzę na wieczór, butelkę na wodę, coś do stołu (słodkiego albo słonego, obojętnie).\n\nDla chętnych: instrument, książkę do czytania w cieniu, coś, co chcesz pokazać innym, latarkę czołówkę." },
+      { icon: "🍴", title: "Jedzenie", content: "Kuchnia festiwalowa gotuje dwa posiłki dziennie — śniadanie i obiad. Kolacja jest wspólna, z tego co przywieziemy.\n\nJest roślinnie. Jeśli masz alergię lub specjalną dietę, napisz do gospodarza przed przyjazdem." },
+      { icon: "💫", title: "FAQ", content: "**Czy mogę przyjechać z psem?** Tak, jeśli jest spokojny z ludźmi i innymi zwierzętami.\n\n**Czy będzie prąd?** Tak, ale niezawodnie raczej nie. Powerbank mile widziany.\n\n**Czy będzie sieć?** Słaba. I to jest jedna z najlepszych cech tego miejsca.\n\n**Czy mogę zaprosić znajomego?** Najpierw zapytaj bau." },
     ];
     for (let i = 0; i < sections.length; i++) {
       const id = "seed-sec-" + i;
@@ -1042,6 +1049,117 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
   );
 };
 
+// ============================================================
+// PWA INSTALL BANNER
+// Listens for the beforeinstallprompt event (Chrome/Edge/Android)
+// or shows iOS-specific instructions on Safari. Persists dismissal.
+// ============================================================
+const PWA_DISMISS_KEY = "campbau:pwa-dismissed";
+
+const isStandalone = () => {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
+};
+
+const isIOS = () => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+};
+
+const PwaInstallBanner = () => {
+  const [deferred, setDeferred] = useState(null);
+  const [visible, setVisible] = useState(false);
+  const [showIosHint, setShowIosHint] = useState(false);
+
+  useEffect(() => {
+    if (isStandalone()) return; // already installed
+    let dismissed = false;
+    try { dismissed = localStorage.getItem(PWA_DISMISS_KEY) === "1"; } catch {}
+    if (dismissed) return;
+
+    // Chrome/Edge/Android — wait for beforeinstallprompt
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferred(e);
+      setVisible(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+
+    // iOS Safari — no install prompt API, show manual instructions after a beat
+    if (isIOS()) {
+      const id = setTimeout(() => setVisible(true), 1500);
+      return () => {
+        clearTimeout(id);
+        window.removeEventListener("beforeinstallprompt", handler);
+      };
+    }
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const dismiss = () => {
+    try { localStorage.setItem(PWA_DISMISS_KEY, "1"); } catch {}
+    setVisible(false);
+  };
+
+  const install = async () => {
+    if (deferred) {
+      deferred.prompt();
+      const result = await deferred.userChoice.catch(() => null);
+      setDeferred(null);
+      if (result?.outcome === "accepted") {
+        setVisible(false);
+      }
+      return;
+    }
+    // iOS: show how-to overlay
+    setShowIosHint(true);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <>
+      <div className="border border-black p-4 mb-6 flex items-center gap-4">
+        <div className="text-3xl shrink-0">📲</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-base">Zainstaluj aplikację</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-0.5">
+            Szybszy dostęp z ekranu głównego
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 shrink-0">
+          <Button size="sm" onClick={install}>Zainstaluj</Button>
+          <button onClick={dismiss}
+            className="font-mono text-[10px] uppercase tracking-widest opacity-60 hover:opacity-100">
+            Później
+          </button>
+        </div>
+      </div>
+      {/* iOS install instructions overlay */}
+      {showIosHint && (
+        <Modal open={showIosHint} onClose={() => setShowIosHint(false)} title="Jak zainstalować">
+          <div className="space-y-4 text-sm">
+            <p>Na iPhone / iPad:</p>
+            <ol className="space-y-2 list-decimal list-inside">
+              <li>Stuknij ikonę <strong>Udostępnij</strong> u dołu ekranu (kwadrat ze strzałką w górę).</li>
+              <li>Przewiń i wybierz <strong>"Do ekranu początkowego"</strong>.</li>
+              <li>Stuknij <strong>"Dodaj"</strong> w prawym górnym rogu.</li>
+            </ol>
+            <p className="font-mono text-[10px] uppercase tracking-widest opacity-60 pt-2">
+              Aplikacja pojawi się jako ikona obok innych — będziesz ją otwierać bez paska Safari.
+            </p>
+            <Button onClick={() => setShowIosHint(false)} className="w-full">OK</Button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+};
+
 const HomeView = ({ user, guestListVisible, onNavigate }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
@@ -1065,6 +1183,7 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
   return (
     <div className="pb-20">
       <div className="px-5 pt-8">
+        <PwaInstallBanner />
         {miejsceLoaded && (
           <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
         )}
@@ -1441,6 +1560,9 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
   const isAdmin = user.role === "admin";
   const routerNavigate = useNavigate();
   const openEvent = (id) => routerNavigate("/wydarzenia/" + encodeURIComponent(id));
+  const sectionRefs = useRef({}); // date string -> DOM element
+  const calendarRef = useRef(null);
+  const [selectedDate, setSelectedDate] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -1466,6 +1588,26 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
    });
   const eventsNoDate = events.filter(e => !e.date);
 
+  // Group by date string YYYY-MM-DD
+  const groupsByDate = {};
+  for (const it of combined) {
+    if (!groupsByDate[it.date]) groupsByDate[it.date] = [];
+    groupsByDate[it.date].push(it);
+  }
+  const dateKeys = Object.keys(groupsByDate).sort();
+
+  // On first load with events, highlight the closest day to today
+  useEffect(() => {
+    if (selectedDate || dateKeys.length === 0) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let closest = dateKeys[0];
+    for (const d of dateKeys) {
+      if (d <= todayStr) closest = d;
+      else break;
+    }
+    setSelectedDate(closest);
+  }, [dateKeys.length, selectedDate]); // eslint-disable-line
+
   const save = async (data) => {
     const item = editing ? { ...editing, ...data } : { id: uid(), ...data };
     await storage.set("wydarzenie:" + item.id, item);
@@ -1478,71 +1620,141 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
     load();
   };
 
+  const scrollToDay = (dateStr) => {
+    setSelectedDate(dateStr);
+    const target = sectionRefs.current[dateStr];
+    if (target) {
+      // Scroll page so section header sits below the sticky header (80) + calendar strip (~80)
+      const y = target.getBoundingClientRect().top + window.scrollY - 170;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
+    // Center the selected calendar tile within the strip
+    const cal = calendarRef.current;
+    if (cal) {
+      const tile = cal.querySelector(`[data-date="${dateStr}"]`);
+      if (tile) {
+        const desired = tile.offsetLeft - (cal.clientWidth - tile.offsetWidth) / 2;
+        cal.scrollTo({ left: Math.max(0, desired), behavior: "smooth" });
+      }
+    }
+  };
+
+  // Format helpers for calendar tile
+  const fmtWeekday = (dStr) => new Date(dStr + "T12:00").toLocaleDateString("pl-PL", { weekday: "short" }).replace(".", "");
+  const fmtDay = (dStr) => new Date(dStr + "T12:00").getDate();
+  const fmtMonth = (dStr) => new Date(dStr + "T12:00").toLocaleDateString("pl-PL", { month: "short" }).replace(".", "");
+  const fmtSectionDate = (dStr) => {
+    const d = new Date(dStr + "T12:00");
+    return d.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
+  };
+
   return (
     <div className="pb-20">
       <PageHeader title="Wydarzenia"
         subtitle={`${combined.length} ${combined.length === 1 ? "wydarzenie" : "wydarzeń"}`}
         action={isAdmin && <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Dodaj</Button>} />
+
+      {/* Day calendar strip — only when there are dated events */}
+      {dateKeys.length > 0 && (
+        <div className="mb-6">
+          <div ref={calendarRef}
+            className="overflow-x-auto no-scrollbar px-5"
+            style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
+            <div className="flex gap-2" style={{ width: "max-content" }}>
+              {dateKeys.map(dateStr => {
+                const isSelected = dateStr === selectedDate;
+                const count = groupsByDate[dateStr].length;
+                return (
+                  <button key={dateStr} data-date={dateStr}
+                    onClick={() => scrollToDay(dateStr)}
+                    className={`shrink-0 border border-black px-3 py-2.5 w-20 text-center transition-colors ${isSelected ? "bg-black text-white" : "hover:bg-black/5"}`}>
+                    <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{fmtWeekday(dateStr)}</div>
+                    <div className="font-display text-2xl leading-none my-1">{fmtDay(dateStr)}</div>
+                    <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{fmtMonth(dateStr)}</div>
+                    <div className={`font-mono text-[9px] uppercase tracking-widest mt-1 ${isSelected ? "opacity-90" : "opacity-50"}`}>
+                      {count} {count === 1 ? "wyd." : "wyd."}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
         : combined.length === 0 && eventsNoDate.length === 0 ? <EmptyState message="Brak wydarzeń" />
         : (
-          <div className="px-5 space-y-3">
-            {combined.map(it => (
-              <Card key={it._type + ":" + it.id} className="overflow-hidden"
-                onClick={it._type === "stacja" ? () => onOpenStacja(it.id) : () => openEvent(it.id)}>
-                <div className="flex">
-                  {it.image && (
-                    <img src={it.image} alt=""
-                      className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
-                  )}
-                  <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
-                      {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">🚌 Kosmobus</span>}
-                      <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(it.date, it.time)}</span>
-                    </div>
-                    <div className="flex items-start justify-between gap-3 flex-1">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
-                        {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
-                      </div>
-                      {isAdmin && it._type === "event" && (
-                        <div className="flex flex-col gap-2 shrink-0">
-                          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setEditing(it); setModalOpen(true); }}>Edytuj</Button>
-                          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); remove(it.id); }}>Usuń</Button>
+          <div className="px-5">
+            {dateKeys.map(dateStr => (
+              <section key={dateStr}
+                ref={(el) => { sectionRefs.current[dateStr] = el; }}
+                className="scroll-mt-44 mb-8">
+                <h2 className="font-display text-lg uppercase mb-3 sticky top-20 z-10 backdrop-blur bg-white/40 dark:bg-black/40 -mx-5 px-5 py-2 border-b border-black/10">
+                  {fmtSectionDate(dateStr)}
+                </h2>
+                <div className="space-y-3">
+                  {groupsByDate[dateStr].map(it => (
+                    <Card key={it._type + ":" + it.id} className="overflow-hidden"
+                      onClick={it._type === "stacja" ? () => onOpenStacja(it.id) : () => openEvent(it.id)}>
+                      <div className="flex">
+                        {it.image && (
+                          <img src={it.image} alt=""
+                            className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
+                        )}
+                        <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
+                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">🚌 Kosmobus</span>}
+                            {it.time && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{it.time.slice(0, 5)}</span>}
+                          </div>
+                          <div className="flex items-start justify-between gap-3 flex-1">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
+                              {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
+                            </div>
+                            {isAdmin && it._type === "event" && (
+                              <div className="flex flex-col gap-2 shrink-0">
+                                <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setEditing(it); setModalOpen(true); }}>Edytuj</Button>
+                                <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); remove(it.id); }}>Usuń</Button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
-              </Card>
+              </section>
             ))}
             {eventsNoDate.length > 0 && (
               <>
-                <div className="font-mono text-xs uppercase tracking-widest opacity-60 pt-6 pb-2">Bez daty</div>
-                {eventsNoDate.map(it => (
-                  <Card key={it.id} className="overflow-hidden" onClick={() => openEvent(it.id)}>
-                    <div className="flex">
-                      {it.image && (
-                        <img src={it.image} alt=""
-                          className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
-                      )}
-                      <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2">🚌 Kosmobus</span>}
-                          <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
-                          {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
-                        </div>
-                        {isAdmin && (
-                          <div className="flex flex-col gap-2 shrink-0">
-                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setEditing(it); setModalOpen(true); }}>Edytuj</Button>
-                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); remove(it.id); }}>Usuń</Button>
-                          </div>
+                <div className="font-mono text-xs uppercase tracking-widest opacity-60 pt-2 pb-2">Bez daty</div>
+                <div className="space-y-3">
+                  {eventsNoDate.map(it => (
+                    <Card key={it.id} className="overflow-hidden" onClick={() => openEvent(it.id)}>
+                      <div className="flex">
+                        {it.image && (
+                          <img src={it.image} alt=""
+                            className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
                         )}
+                        <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2">🚌 Kosmobus</span>}
+                            <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">{it.title}</h3>
+                            {it.description && <p className="text-sm opacity-80 line-clamp-2 sm:line-clamp-3">{it.description}</p>}
+                          </div>
+                          {isAdmin && (
+                            <div className="flex flex-col gap-2 shrink-0">
+                              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setEditing(it); setModalOpen(true); }}>Edytuj</Button>
+                              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); remove(it.id); }}>Usuń</Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -1837,7 +2049,7 @@ const FestiwalView = ({ user }) => {
                 {sections.map(s => (
                   <button key={s.id} onClick={() => scrollTo(s.id)}
                     className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-1.5 hover:bg-black hover:text-white">
-                    <span className="mr-1">{s.icon}</span>{s.title}
+                    <span className="mr-1 emoji-mono">{s.icon}</span>{s.title}
                   </button>
                 ))}
               </div>
@@ -1847,7 +2059,7 @@ const FestiwalView = ({ user }) => {
                 <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="text-3xl">{s.icon}</div>
+                      <div className="text-3xl emoji-mono">{s.icon}</div>
                       <h2 className="font-display text-2xl font-bold uppercase">{s.title}</h2>
                     </div>
                     {isAdmin && (
@@ -1874,15 +2086,15 @@ const FestiwalView = ({ user }) => {
   );
 };
 
-const ICON_OPTIONS = ["✧", "✦", "☉", "☽", "☿", "♁", "♄", "⚡", "☄", "⚝", "❋", "◉", "▲", "◯", "◊", "✺", "✹", "❂"];
+const ICON_OPTIONS = ["✨", "🌙", "☀️", "🪐", "🚀", "🌌", "🔭", "⚡", "☄️", "⭐", "🎪", "🎨", "🎵", "🎬", "📚", "🍴", "🌿", "🔥", "💫", "🌠", "🛸", "🌍", "🪩", "🎭", "🥁", "🎤", "📷", "🗺️"];
 
 const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
-  const [form, setForm] = useState({ icon: "✧", title: "", content: "", photo: null });
+  const [form, setForm] = useState({ icon: "✨", title: "", content: "", photo: null });
   useEffect(() => {
     if (open) setForm(editing ? {
       icon: editing.icon || "✧", title: editing.title || "",
       content: editing.content || "", photo: editing.photo || null
-    } : { icon: "✧", title: "", content: "", photo: null });
+    } : { icon: "✨", title: "", content: "", photo: null });
   }, [open, editing]);
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const submit = (e) => {
@@ -1895,10 +2107,10 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
       <form onSubmit={submit} className="space-y-4">
         <div>
           <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Ikona</span>
-          <div className="grid grid-cols-9 gap-1">
+          <div className="grid grid-cols-7 gap-1">
             {ICON_OPTIONS.map(ic => (
               <button key={ic} type="button" onClick={() => update("icon", ic)}
-                className={`aspect-square text-xl border border-black ${form.icon === ic ? "bg-black text-white" : "bg-transparent"}`}>
+                className={`aspect-square text-xl border border-black emoji-mono ${form.icon === ic ? "bg-black text-white" : "bg-transparent"}`}>
                 {ic}
               </button>
             ))}

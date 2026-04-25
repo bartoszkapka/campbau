@@ -635,15 +635,18 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
 
   // When over a forced-dark hero, behave like dark mode visually regardless of theme.
   const overHero = forceDark && !scrolled;
-  // Background: opaque after scroll, transparent at top
+  // Header always becomes black-on-white-text once scrolled, regardless of theme.
   const bgClass = scrolled
-    ? (theme === "dark" ? "bg-black border-b border-black/30" : "bg-white border-b border-black/10")
+    ? "bg-black border-b border-black/30"
     : "bg-transparent";
-  // Foreground: white over hero, otherwise inherit
-  const fg = overHero ? "text-white" : "";
-  const borderColor = overHero ? "border-white" : "border-black";
-  const navHoverBorder = overHero ? "hover:border-white" : "hover:border-black";
-  const activeBg = overHero ? "bg-white text-black border-white" : "bg-black text-white border-black";
+  // Foreground: white when scrolled (over black bar) or when over hero
+  const lightFg = scrolled || overHero;
+  const fg = lightFg ? "text-white" : "";
+  const borderColor = lightFg ? "border-white" : "border-black";
+  const navHoverBorder = lightFg ? "hover:border-white" : "hover:border-black";
+  const activeBg = lightFg ? "bg-white text-black border-white" : "bg-black text-white border-black";
+  const buttonHover = lightFg ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white";
+  const barColor = lightFg ? "bg-white" : "bg-black";
 
   return (
     <header className={`sticky top-0 z-30 transition-colors duration-200 ${bgClass} ${fg}`}>
@@ -665,23 +668,23 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
         </nav>
         {/* Theme toggle — always visible */}
         <button onClick={onToggleTheme}
-          className={`border ${borderColor} w-11 h-11 flex items-center justify-center text-lg shrink-0 transition-colors ml-auto lg:ml-0 ${overHero ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white"}`}
+          className={`border ${borderColor} w-11 h-11 flex items-center justify-center text-lg shrink-0 transition-colors ml-auto lg:ml-0 ${buttonHover}`}
           aria-label="Toggle theme">
           {theme === "dark" ? "☀" : "☾"}
         </button>
         {/* Desktop logout */}
         <button onClick={onLogout}
-          className={`hidden lg:inline-flex font-display text-xs px-4 py-2 border ${borderColor} shrink-0 transition-colors ${overHero ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white"}`}>
+          className={`hidden lg:inline-flex font-display text-xs px-4 py-2 border ${borderColor} shrink-0 transition-colors ${buttonHover}`}>
           Wyloguj
         </button>
         {/* Mobile hamburger */}
         <button onClick={onMenuOpen}
-          className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 transition-colors ${overHero ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white"}`}
+          className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 transition-colors ${buttonHover}`}
           aria-label="Menu">
           <div className="space-y-1.5">
-            <div className={`w-5 h-0.5 ${overHero ? "bg-white" : "bg-black"}`} />
-            <div className={`w-5 h-0.5 ${overHero ? "bg-white" : "bg-black"}`} />
-            <div className={`w-5 h-0.5 ${overHero ? "bg-white" : "bg-black"}`} />
+            <div className={`w-5 h-0.5 ${barColor}`} />
+            <div className={`w-5 h-0.5 ${barColor}`} />
+            <div className={`w-5 h-0.5 ${barColor}`} />
           </div>
         </button>
       </div>
@@ -1035,19 +1038,26 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
 
   return (
     <div className="pb-20">
-      {/* Hero — full viewport width, 560px tall, starts at top of viewport (under sticky header).
+      {/* Hero — full viewport width, 600px tall, starts at top of viewport (under sticky header).
           The negative top margin pulls it under the 80px-tall header so the header overlays it.
           The negative left margin + 100vw width breaks out of the parent's max-w-7xl.
-          object-cover scales the image to fill the box, cropping sides on narrow screens
-          and scaling up on wider screens — gradient peeks through transparent parts. */}
+          The image is scaled to 102% so it slightly overflows the box on every side, hiding
+          any sub-pixel edge bleed of the gradient background while preserving transparent
+          areas where the gradient still peeks through. */}
       <div
         className="relative -mt-20 left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden"
-        style={{ height: "560px" }}
+        style={{ height: "600px" }}
       >
         <img
           src="/cb26_hero.svg"
           alt="Camp Bau 26"
-          className="w-full h-full object-cover select-none pointer-events-none"
+          className="absolute top-1/2 left-1/2 select-none pointer-events-none"
+          style={{
+            width: "102%",
+            height: "102%",
+            objectFit: "cover",
+            transform: "translate(-50%, -50%)"
+          }}
           draggable={false}
         />
       </div>

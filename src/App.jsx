@@ -297,6 +297,25 @@ const truncateGraphemes = (str, max = 2) => {
   return Array.from(str).slice(0, max * 2).join("");
 };
 
+// Detects when a sticky-positioned element is "stuck" to the top of the viewport.
+// Place a 1px sentinel just before the sticky element and pass its ref here.
+// Pass the sticky element's top offset in pixels (e.g. 80 for `top-20`).
+// Returns true while the sticky element is pinned.
+const useStickyDetect = (sentinelRef, topOffset = 80) => {
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setStuck(!entry.isIntersecting),
+      { rootMargin: `-${topOffset + 1}px 0px 0px 0px`, threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sentinelRef, topOffset]);
+  return stuck;
+};
+
 const resizeImage = (file, maxSize = 1000) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -1437,11 +1456,14 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
       storage.get("stacje_intro")
     ]);
     setIntro(introData?.text || "");
-    // filter by visibility
+    // Filter by visibility:
+    // - public: visible to all (full)
+    // - hidden: visible to all (mystery card for non-admin/non-owner; full for admin/owner)
+    // - host: visible only to admin/owner
     const visible = all.filter(s => {
       if (s.visibility === "public") return true;
+      if (s.visibility === "hidden") return true;
       if (s.visibility === "host") return isAdmin || s.owners?.includes(user.id);
-      if (s.visibility === "hidden") return s.owners?.includes(user.id);
       return false;
     });
     visible.sort((a, b) => {
@@ -1495,12 +1517,18 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
         : items.length === 0 ? <EmptyState message="Brak stacji" />
         : (
           <div className="px-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {items.map(it => (
-              <StacjaCard key={it.id} item={it} users={users} onClick={() => onOpenDetail(it.id)} />
-            ))}
+            {items.map(it => {
+              // Mystery view = hidden visibility, and the viewer isn't admin or owner
+              const isOwner = it.owners?.includes(user.id);
+              const mystery = it.visibility === "hidden" && !isAdmin && !isOwner;
+              return (
+                <StacjaCard key={it.id} item={it} users={users} mystery={mystery}
+                  onClick={() => onOpenDetail(it.id)} />
+              );
+            })}
           </div>
         )}
-      <StacjaFormModal open={formOpen} onClose={() => setFormOpen(false)} onSave={save} />
+      <StacjaFormModal open={formOpen} onClose={() => setFormOpen(false)} onSave={save} isAdmin={isAdmin} />
       <StacjeIntroModal open={introOpen} onClose={() => setIntroOpen(false)} initial={intro} onSave={saveIntro} />
     </div>
   );
@@ -1530,18 +1558,44 @@ const visibilityLabel = (v) => ({
   host: "Dla organizatora",
 }[v] || v);
 
-const StacjaCard = ({ item, users, onClick }) => {
+const StacjaCard = ({ item, users, mystery, onClick }) => {
+  // Mystery view: card looks intriguing but reveals no actual content
+  if (mystery) {
+    return (
+      <Card onClick={onClick} className="overflow-hidden flex flex-col items-center justify-center p-8 min-h-[200px] text-center">
+        <div className="text-5xl emoji-mono mb-4">🔒</div>
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
+        <h3 className="font-display text-2xl">???</h3>
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-50 mt-3">Wkrótce</div>
+      </Card>
+    );
+  }
+
   const ownerNames = item.owners?.map(id => {
     const u = users.find(u => u.id === id);
     return u ? (u.firstName || u.username) : null;
   }).filter(Boolean).slice(0, 3).join(", ") || "—";
+
+  // Date display logic:
+  //   hasDate + date  → formal date/time
+  //   hasDate + suggestion (no date) → "Sugestia: <text>"
+  //   hasDate + nothing → "Data do ustalenia"
+  //   !hasDate (legacy: no flag, no date) → no row
+  const hasDate = item.hasDate || !!item.date;
+  let dateLine = null;
+  if (hasDate) {
+    if (item.date) dateLine = formatDate(item.date, item.time);
+    else if (item.dateSuggestion) dateLine = `Sugestia: ${item.dateSuggestion}`;
+    else dateLine = "Data do ustalenia";
+  }
+
   return (
     <Card onClick={onClick} className="overflow-hidden flex flex-col">
       {item.image && <img src={item.image} alt="" className="w-full h-36 object-cover border-b border-black" />}
       <div className="p-4 flex-1 flex flex-col">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
-          {item.date && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{formatDate(item.date, item.time)}</span>}
+          {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{dateLine}</span>}
         </div>
         <h3 className="font-display text-lg mb-1 leading-tight">
           {item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
@@ -1555,27 +1609,50 @@ const StacjaCard = ({ item, users, onClick }) => {
   );
 };
 
-const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
-  const [form, setForm] = useState({ title: "", description: "", image: null, date: "", time: "", visibility: "public", icon: "" });
+const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
+  const [form, setForm] = useState({
+    title: "", description: "", image: null, date: "", time: "",
+    visibility: "public", icon: "",
+    hasDate: false, dateSuggestion: ""
+  });
   useEffect(() => {
     if (open) {
       setForm(editing ? {
         title: editing.title || "", description: editing.description || "",
         image: editing.image || null, date: editing.date || "", time: editing.time || "",
         visibility: editing.visibility || "public",
-        icon: editing.icon || ""
-      } : { title: "", description: "", image: null, date: "", time: "", visibility: "public", icon: "" });
+        icon: editing.icon || "",
+        // Backward-compat: existing stacja with a date implicitly has hasDate=true
+        hasDate: editing.hasDate ?? !!editing.date,
+        dateSuggestion: editing.dateSuggestion || ""
+      } : {
+        title: "", description: "", image: null, date: "", time: "",
+        visibility: "public", icon: "",
+        hasDate: false, dateSuggestion: ""
+      });
     }
   }, [open, editing]);
-  const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const update = (k, v) => setForm(prev => {
+    const next = { ...prev, [k]: v };
+    // Toggling hasDate off clears the date fields
+    if (k === "hasDate" && !v) {
+      next.date = ""; next.time = ""; next.dateSuggestion = "";
+    }
+    return next;
+  });
   const submit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
     onSave({
       title: form.title.trim(), description: form.description.trim(),
-      image: form.image, date: form.date || null, time: form.time || null,
-      visibility: form.visibility,
-      icon: form.icon.trim() || null
+      image: form.image,
+      // Admin can set date/time directly. Non-admin owners can only suggest.
+      date: (isAdmin && form.hasDate) ? (form.date || null) : (editing?.date || null),
+      time: (isAdmin && form.hasDate) ? (form.time || null) : (editing?.time || null),
+      visibility: isAdmin ? form.visibility : (editing?.visibility || "public"),
+      icon: form.icon.trim() || null,
+      hasDate: isAdmin ? form.hasDate : (editing?.hasDate ?? !!editing?.date),
+      dateSuggestion: form.hasDate ? (form.dateSuggestion.trim() || "") : ""
     });
   };
   return (
@@ -1594,29 +1671,63 @@ const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Input label="Data (opcjonalna)" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
-          <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
-        </div>
-        <div>
-          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Widoczność</span>
-          <div className="space-y-2">
-            {[
-              { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
-              { value: "hidden", title: "Ukryta", desc: "Tylko dla organizatorów" },
-              { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna dla adminów" },
-            ].map(opt => {
-              const selected = form.visibility === opt.value;
-              return (
-                <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
-                  className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-                  <div className="font-display text-sm">{opt.title}</div>
-                  <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
-                </button>
-              );
-            })}
+
+        {/* Date flag — only admin can toggle; non-admin owners see it as read-only context */}
+        {isAdmin && (
+          <button type="button" onClick={() => update("hasDate", !form.hasDate)}
+            className={`w-full text-left border px-4 py-3 transition-colors ${form.hasDate ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+            <div className="font-display text-sm">Z datą i godziną{form.hasDate && " — włączone"}</div>
+            <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.hasDate ? "opacity-80" : "opacity-60"}`}>
+              Stacja będzie miała wyznaczony termin
+            </div>
+          </button>
+        )}
+
+        {form.hasDate && (
+          <>
+            {/* Admin sets formal date/time */}
+            {isAdmin && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input label="Data" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
+                <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
+              </div>
+            )}
+            {/* Suggestion field — both admin and owners can write here */}
+            <Input label={isAdmin ? "Sugestia (opcjonalnie)" : "Sugerowana data / godzina"}
+              value={form.dateSuggestion}
+              onChange={e => update("dateSuggestion", e.target.value)}
+              placeholder="np. piątek wieczorem" />
+            {!isAdmin && (
+              <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+                Ostateczny termin ustala admin. Twoja sugestia jest widoczna dla wszystkich.
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Visibility — admin only */}
+        {isAdmin && (
+          <div>
+            <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Widoczność</span>
+            <div className="space-y-2">
+              {[
+                { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
+                { value: "hidden", title: "Ukryta", desc: "Widoczna jako sekret — szczegóły zna tylko organizator" },
+                { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna tylko dla adminów i organizatorów" },
+              ].map(opt => {
+                const selected = form.visibility === opt.value;
+                return (
+                  <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
+                    className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                    <div className="font-display text-sm">{opt.title}</div>
+                    <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
+
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -1654,6 +1765,26 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
   const isOwner = item.owners?.includes(user.id);
   const isAdmin = user.role === "admin";
   const canEdit = isOwner || isAdmin;
+  const isMystery = item.visibility === "hidden" && !isAdmin && !isOwner;
+
+  // Mystery early return — no details exposed
+  if (isMystery) {
+    return (
+      <div className="pb-20">
+        <div className="px-5 pt-5">
+          <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
+        </div>
+        <div className="px-5 pt-10 flex flex-col items-center text-center">
+          <div className="text-7xl emoji-mono mb-6">🔒</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold uppercase mb-4">???</h1>
+          <p className="font-mono text-xs uppercase tracking-widest opacity-60 max-w-sm">
+            Szczegóły pojawią się wkrótce
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const saveEdit = async (data) => {
     const updated = { ...item, ...data };
@@ -1690,6 +1821,15 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
   const owners = item.owners.map(id => users.find(u => u.id === id)).filter(Boolean);
   const availableUsers = users.filter(u => !item.owners.includes(u.id));
 
+  // Date display
+  const hasDate = item.hasDate || !!item.date;
+  let dateLine = null;
+  if (hasDate) {
+    if (item.date) dateLine = formatDate(item.date, item.time);
+    else if (item.dateSuggestion) dateLine = `Sugestia: ${item.dateSuggestion}`;
+    else dateLine = "Data do ustalenia";
+  }
+
   return (
     <div className="pb-20">
       <div className="px-5 pt-5">
@@ -1703,7 +1843,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
           <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
-          {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
+          {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{dateLine}</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
           {item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
@@ -1742,7 +1882,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
           <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
         </div>
       )}
-      <StacjaFormModal open={editOpen} onClose={() => setEditOpen(false)} onSave={saveEdit} editing={item} />
+      <StacjaFormModal open={editOpen} onClose={() => setEditOpen(false)} onSave={saveEdit} editing={item} isAdmin={isAdmin} />
       <Modal open={coOwnerOpen} onClose={() => setCoOwnerOpen(false)} title="Dodaj organizatora">
         {availableUsers.length === 0
           ? <p className="font-mono text-xs uppercase tracking-widest opacity-60">Brak dostępnych użytkowników</p>
@@ -1783,6 +1923,8 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
   const openEvent = (id) => routerNavigate("/wydarzenia/" + encodeURIComponent(id));
   const sectionRefs = useRef({}); // date string -> DOM element
   const calendarRef = useRef(null);
+  const calendarSentinelRef = useRef(null);
+  const calendarStuck = useStickyDetect(calendarSentinelRef, 80);
   const [selectedDate, setSelectedDate] = useState(null);
 
   const load = async () => {
@@ -1919,28 +2061,32 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
         action={isAdmin && <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Dodaj</Button>} />
 
       {/* Day calendar strip — sticky at the top of the viewport, below the main header.
-          Reflects which day section is currently in view via scroll-spy. */}
+          Reflects which day section is currently in view via scroll-spy. The
+          backdrop only appears when the strip is actually pinned (via sentinel). */}
       {dateKeys.length > 0 && (
-        <div className="sticky top-20 z-20 sticky-bar mb-6 border-b border-black/10">
-          <div ref={calendarRef}
-            className="overflow-x-auto no-scrollbar px-5 py-2"
-            style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
-            <div className="flex gap-2" style={{ width: "max-content" }}>
-              {dateKeys.map(dateStr => {
-                const isSelected = dateStr === selectedDate;
-                return (
-                  <button key={dateStr} data-date={dateStr}
-                    onClick={() => scrollToDay(dateStr)}
-                    className={`shrink-0 border border-black px-2 py-2 w-14 text-center transition-colors ${isSelected ? "bg-black text-white" : "hover:bg-black/5"}`}>
-                    <div className="font-mono text-[8px] uppercase tracking-widest opacity-70">{fmtWeekday(dateStr)}</div>
-                    <div className="font-display text-lg leading-none my-1">{fmtDay(dateStr)}</div>
-                    <div className="font-mono text-[8px] uppercase tracking-widest opacity-70">{fmtMonth(dateStr)}</div>
-                  </button>
-                );
-              })}
+        <>
+          <div ref={calendarSentinelRef} aria-hidden style={{ height: "1px" }} />
+          <div className={`sticky top-20 z-20 mb-6 transition-colors ${calendarStuck ? "sticky-bar border-b border-black/10" : ""}`}>
+            <div ref={calendarRef}
+              className="overflow-x-auto no-scrollbar px-5 py-2"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
+              <div className="flex gap-2" style={{ width: "max-content" }}>
+                {dateKeys.map(dateStr => {
+                  const isSelected = dateStr === selectedDate;
+                  return (
+                    <button key={dateStr} data-date={dateStr}
+                      onClick={() => scrollToDay(dateStr)}
+                      className={`shrink-0 border border-black px-2 py-2 w-14 text-center transition-colors ${isSelected ? "bg-black text-white" : "hover:bg-black/5"}`}>
+                      <div className="font-mono text-[8px] uppercase tracking-widest opacity-70">{fmtWeekday(dateStr)}</div>
+                      <div className="font-display text-lg leading-none my-1">{fmtDay(dateStr)}</div>
+                      <div className="font-mono text-[8px] uppercase tracking-widest opacity-70">{fmtMonth(dateStr)}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
@@ -1952,7 +2098,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                 ref={(el) => { sectionRefs.current[dateStr] = el; }}
                 data-date={dateStr}
                 className="scroll-mt-44 mb-8">
-                <h2 className="font-display text-lg uppercase mb-3 sticky top-40 z-10 sticky-bar -mx-5 px-5 py-2 border-b border-black/10">
+                <h2 className="font-display text-lg uppercase mb-3 -mx-5 px-5 py-2 border-b border-black/10">
                   {fmtSectionDate(dateStr)}
                 </h2>
                 <div className="space-y-3">
@@ -2668,6 +2814,8 @@ const FestiwalView = ({ user }) => {
   const [editing, setEditing] = useState(null);
   const [activeSectionId, setActiveSectionId] = useState(null);
   const navRef = useRef(null);
+  const navSentinelRef = useRef(null);
+  const navStuck = useStickyDetect(navSentinelRef, 80);
   const userScrollLockRef = useRef(false);
   const isAdmin = user.role === "admin";
 
@@ -2755,7 +2903,8 @@ const FestiwalView = ({ user }) => {
         : sections.length === 0 ? <EmptyState message="Brak sekcji" />
         : (
           <>
-            <div ref={navRef} className="sticky top-20 z-20 sticky-bar border-y border-black overflow-x-auto no-scrollbar"
+            <div ref={navSentinelRef} aria-hidden style={{ height: "1px" }} />
+            <div ref={navRef} className={`sticky top-20 z-20 overflow-x-auto no-scrollbar transition-colors ${navStuck ? "sticky-bar border-b border-black/10" : ""}`}
               style={{ touchAction: "pan-x pan-y" }}>
               <div className="flex gap-2 px-5 py-3 whitespace-nowrap">
                 {sections.map(s => {
@@ -2771,7 +2920,7 @@ const FestiwalView = ({ user }) => {
                 })}
               </div>
             </div>
-            <div className="px-5 space-y-10 pt-6">
+            <div className="px-5 space-y-16 pt-6">
               {sections.map((s, idx) => (
                 <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
                   <div className="flex items-start justify-between gap-3 mb-4">

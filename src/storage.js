@@ -112,7 +112,8 @@ export const rawStorage = {
   get: impl.get,
   set: impl.set,
   delete: impl.delete,
-  list: impl.list
+  list: impl.list,
+  getAll: impl.getAll
 };
 
 // JSON-helper layer (matches what the app's own `storage` helper used to do)

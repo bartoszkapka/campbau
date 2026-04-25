@@ -57,12 +57,12 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(40px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 18s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 22s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 16s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 20s ease-in-out infinite alternate; }
-    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 24s ease-in-out infinite alternate; }
-    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 19s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 14s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 17s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 13s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 15s ease-in-out infinite alternate; }
+    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 18s ease-in-out infinite alternate; }
+    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 14s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -1633,7 +1633,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
       time: (isAdmin && form.hasDate) ? (form.time || null) : (editing?.time || null),
       visibility: form.visibility,
       icon: form.icon.trim() || null,
-      hasDate: isAdmin ? form.hasDate : (editing?.hasDate ?? !!editing?.date),
+      hasDate: form.hasDate,
       dateSuggestion: form.hasDate ? (form.dateSuggestion.trim() || "") : ""
     });
   };
@@ -1654,34 +1654,32 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
 
-        {/* Date flag — only admin can toggle; non-admin owners see it as read-only context */}
-        {isAdmin && (
-          <button type="button" onClick={() => update("hasDate", !form.hasDate)}
-            className={`w-full text-left border px-4 py-3 transition-colors ${form.hasDate ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-            <div className="font-display text-sm">Z datą i godziną{form.hasDate && " — włączone"}</div>
-            <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.hasDate ? "opacity-80" : "opacity-60"}`}>
-              Stacja będzie miała wyznaczony termin
-            </div>
-          </button>
-        )}
+        {/* Date flag — anyone editing the stacja (admin or owner) can toggle this. */}
+        <button type="button" onClick={() => update("hasDate", !form.hasDate)}
+          className={`w-full text-left border px-4 py-3 transition-colors ${form.hasDate ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+          <div className="font-display text-sm">Z datą i godziną{form.hasDate && " — włączone"}</div>
+          <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${form.hasDate ? "opacity-80" : "opacity-60"}`}>
+            Stacja będzie miała wyznaczony termin
+          </div>
+        </button>
 
         {form.hasDate && (
           <>
-            {/* Admin sets formal date/time */}
+            {/* Final date/time — admin only */}
             {isAdmin && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input label="Data" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
                 <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
               </div>
             )}
-            {/* Suggestion field — both admin and owners can write here */}
+            {/* Suggestion — admin and owners */}
             <Input label={isAdmin ? "Sugestia (opcjonalnie)" : "Sugerowana data / godzina"}
               value={form.dateSuggestion}
               onChange={e => update("dateSuggestion", e.target.value)}
               placeholder="np. piątek wieczorem" />
             {!isAdmin && (
               <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
-                Ostateczny termin ustala admin. Twoja sugestia jest widoczna dla wszystkich.
+                Tylko Bau może wyznaczyć ostateczną datę i godzinę. Twoja sugestia jest widoczna dla wszystkich.
               </p>
             )}
           </>
@@ -1693,8 +1691,8 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
           <div className="space-y-2">
             {[
               { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
-              { value: "hidden", title: "Ukryta", desc: "Widoczna jako sekret — szczegóły zna tylko organizator" },
-              { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna tylko dla adminów i organizatorów" },
+              { value: "hidden", title: "Ukryta", desc: "Widoczna jako sekret — szczegóły znają tylko organizatorzy stacji" },
+              { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna tylko dla organizatorów stacji oraz dla Baua" },
             ].map(opt => {
               const selected = form.visibility === opt.value;
               return (

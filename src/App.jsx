@@ -12,7 +12,7 @@ const GlobalStyles = () => (
     body {
       font-family: 'Verlag', 'Verlag A', 'Verlag B', 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 400;
-      color: #000;
+      color: #0d0d0d;
       background: #f2ecff;
       overscroll-behavior: none;
     }
@@ -43,6 +43,7 @@ const GlobalStyles = () => (
       z-index: -1;
       overflow: hidden;
       pointer-events: none;
+      filter: saturate(1.1);
     }
     .blob {
       position: absolute;
@@ -56,11 +57,11 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(50px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 24s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 28s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 22s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 25s ease-in-out infinite alternate; }
-    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 20s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 19s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 22s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 18s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 20s ease-in-out infinite alternate; }
+    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 16s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0% { transform: translate(0,0) scale(1); }
@@ -104,37 +105,41 @@ const GlobalStyles = () => (
       --grad: linear-gradient(135deg, #7ef7ff 0%, #ffc2ce 25%, #e872f5 50%, #9080ff 75%, #7ef7ff 100%);
     }
 
-    body.dark .border-black {
+    body.dark .border-black, .force-dark .border-black {
       border-color: transparent;
       border-image: var(--grad) 1;
     }
-    body.dark .border-dashed { border-style: dashed; }
-    body.dark .border-black\\/20 { border-color: rgba(255,255,255,0.25); }
-    body.dark .border-white { border-color: #fff; }
+    body.dark .border-dashed, .force-dark .border-dashed { border-style: dashed; }
+    body.dark .border-black\\/20, .force-dark .border-black\\/20 { border-color: rgba(255,255,255,0.25); }
+    body.dark .border-white, .force-dark .border-white { border-color: #fff; }
 
-    body.dark .bg-black { background: var(--grad); color: #000; }
-    body.dark .text-black { color: #fff; }
-    body.dark .text-white { color: #000; }
+    body.dark .bg-black, .force-dark .bg-black { background: var(--grad); color: #000; }
+    body.dark .text-black, .force-dark .text-black { color: #fff; }
+    body.dark .text-white, .force-dark .text-white { color: #000; }
 
-    body.dark .hover\\:bg-black:hover { background: var(--grad); color: #000; }
-    body.dark .hover\\:text-white:hover { color: #000; }
-    body.dark .hover\\:bg-black\\/5:hover { background: rgba(255,255,255,0.06); }
+    body.dark .hover\\:bg-black:hover, .force-dark .hover\\:bg-black:hover { background: var(--grad); color: #000; }
+    body.dark .hover\\:text-white:hover, .force-dark .hover\\:text-white:hover { color: #000; }
+    body.dark .hover\\:bg-black\\/5:hover, .force-dark .hover\\:bg-black\\/5:hover { background: rgba(255,255,255,0.06); }
 
-    body.dark .bg-white { background: rgba(255,255,255,0.08); }
-    body.dark .bg-white\\/40 { background: rgba(255,255,255,0.1); }
-    body.dark .bg-white\\/50 { background: rgba(255,255,255,0.12); }
-    body.dark .bg-white\\/60 { background: rgba(255,255,255,0.15); }
+    body.dark .bg-white, .force-dark .bg-white { background: rgba(255,255,255,0.08); }
+    body.dark .bg-white\\/40, .force-dark .bg-white\\/40 { background: rgba(255,255,255,0.1); }
+    body.dark .bg-white\\/50, .force-dark .bg-white\\/50 { background: rgba(255,255,255,0.12); }
+    body.dark .bg-white\\/60, .force-dark .bg-white\\/60 { background: rgba(255,255,255,0.15); }
     .holo-bg-contained {
       background: rgba(255, 255, 255, 0.75);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
     }
-    body.dark .holo-bg-contained {
+    body.dark .holo-bg-contained, .force-dark .holo-bg-contained {
       background: rgba(5, 5, 5, 0.9);
     }
+    /* Drawer is always dark — its container has class "force-dark" */
+    .force-dark { color: #fff; }
 
-    body.dark input, body.dark textarea, body.dark select { color: #fff; }
-    body.dark .placeholder\\:text-black\\/40::placeholder { color: rgba(255,255,255,0.4); }
+    body.dark input, body.dark textarea, body.dark select,
+    .force-dark input, .force-dark textarea, .force-dark select { color: #fff; }
+    body.dark .placeholder\\:text-black\\/40::placeholder,
+    .force-dark .placeholder\\:text-black\\/40::placeholder { color: rgba(255,255,255,0.4); }
 
     input, textarea, select, button { font-family: inherit; }
     input:focus, textarea:focus, select:focus { outline: none; }
@@ -703,7 +708,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
   const profileActive = currentView === "profile";
   return (
     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <aside className="absolute right-0 top-0 bottom-0 w-full max-w-sm holo-bg-contained border-l border-black drawer-enter overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <aside className="force-dark absolute right-0 top-0 bottom-0 w-full max-w-sm holo-bg-contained border-l border-black drawer-enter overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 h-14 border-b border-black bg-black text-white sticky top-0 z-10">
           <span className="font-display">Menu</span>
           <button onClick={onClose} className="text-2xl leading-none p-1" aria-label="Close">✕</button>
@@ -989,7 +994,7 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
         <div className="flex items-center gap-2 shrink-0" title={`${moon.name} · ${Math.round(moon.illumination * 100)}%`}>
           <div className="text-right">
             <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 leading-none">Księżyc</div>
-            <div className="font-mono text-[9px] uppercase tracking-widest opacity-60 leading-none mt-0.5 truncate max-w-[110px]">{moon.name}</div>
+            <div className="font-mono text-[9px] uppercase tracking-widest opacity-60 leading-none mt-0.5 whitespace-nowrap">{moon.name}</div>
           </div>
           <MoonSvg phase={moon.phase} size={28} />
         </div>
@@ -1038,25 +1043,26 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
 
   return (
     <div className="pb-20">
-      {/* Hero — full viewport width, 600px tall, starts at top of viewport (under sticky header).
+      {/* Hero — full viewport width, 580px tall, starts at top of viewport (under sticky header).
           The negative top margin pulls it under the 80px-tall header so the header overlays it.
           The negative left margin + 100vw width breaks out of the parent's max-w-7xl.
-          The image is scaled to 102% so it slightly overflows the box on every side, hiding
-          any sub-pixel edge bleed of the gradient background while preserving transparent
-          areas where the gradient still peeks through. */}
+          Image overflows the box by 8px on each side using integer pixel values to avoid
+          Safari's sub-pixel rounding bleed at the edges. Transparent areas of the SVG still
+          let the gradient peek through, but the very edges are guaranteed covered. */}
       <div
         className="relative -mt-20 left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden"
-        style={{ height: "600px" }}
+        style={{ height: "580px" }}
       >
         <img
           src="/cb26_hero.svg"
           alt="Camp Bau 26"
-          className="absolute top-1/2 left-1/2 select-none pointer-events-none"
+          className="absolute select-none pointer-events-none"
           style={{
-            width: "102%",
-            height: "102%",
-            objectFit: "cover",
-            transform: "translate(-50%, -50%)"
+            top: "-8px",
+            left: "-8px",
+            width: "calc(100% + 16px)",
+            height: "calc(100% + 16px)",
+            objectFit: "cover"
           }}
           draggable={false}
         />

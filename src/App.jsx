@@ -413,6 +413,34 @@ const Modal = ({ open, onClose, title, children, maxWidth = "max-w-lg" }) => {
   );
 };
 
+// Global error toast — listens for "storage:error" events from src/storage.js
+const ErrorToast = () => {
+  const [errors, setErrors] = useState([]);
+  useEffect(() => {
+    const handler = (e) => {
+      const { op, key, message } = e.detail || {};
+      const id = Date.now() + Math.random();
+      setErrors(es => [...es, { id, op, key, message }]);
+      setTimeout(() => setErrors(es => es.filter(x => x.id !== id)), 8000);
+    };
+    window.addEventListener("storage:error", handler);
+    return () => window.removeEventListener("storage:error", handler);
+  }, []);
+  if (errors.length === 0) return null;
+  return (
+    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-[100] space-y-2 pointer-events-none">
+      {errors.map(e => (
+        <div key={e.id} className="bg-black text-white border border-black p-3 fade-in pointer-events-auto">
+          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-1">
+            Błąd zapisu {e.op && `· ${e.op}`} {e.key && `· ${e.key}`}
+          </div>
+          <div className="text-sm break-words">{e.message}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const ImageUpload = ({ value, onChange, label = "Image", maxSize = 1000 }) => {
   const inputRef = useRef();
   const [loading, setLoading] = useState(false);
@@ -2052,6 +2080,7 @@ const UserEditModal = ({ open, onClose, editing, onSave }) => {
 // ============================================================
 export default function App() {
   const [initialized, setInitialized] = useState(false);
+  const [sessionRestored, setSessionRestored] = useState(false);
   const [initError, setInitError] = useState(null);
   const [user, setUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -2121,16 +2150,31 @@ export default function App() {
 
   // Restore session on init
   useEffect(() => {
-    if (!initialized || user) return;
-    try {
-      const savedUsername = localStorage.getItem("campbau:session");
-      if (savedUsername) {
-        storage.get("user:" + savedUsername).then(u => {
-          if (u) setUser(u);
-        });
+    if (!initialized) return;
+    if (sessionRestored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const savedUsername = localStorage.getItem("campbau:session");
+        if (savedUsername) {
+          const u = await storage.get("user:" + savedUsername);
+          if (!cancelled && u) {
+            setUser(u);
+            const s = await storage.get("settings");
+            if (!cancelled) setGuestListVisible(!!s?.guestListVisible);
+          } else if (!cancelled) {
+            // Session pointed to a user that no longer exists
+            try { localStorage.removeItem("campbau:session"); } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("Session restore failed:", err);
+      } finally {
+        if (!cancelled) setSessionRestored(true);
       }
-    } catch {}
-  }, [initialized, user]);
+    })();
+    return () => { cancelled = true; };
+  }, [initialized, sessionRestored]);
 
   const onLogin = async (u) => {
     setUser(u);
@@ -2169,7 +2213,7 @@ export default function App() {
     setView("stacja-detail");
   };
 
-  if (!initialized) {
+  if (!initialized || !sessionRestored) {
     return (
       <>
         <GlobalStyles />
@@ -2239,6 +2283,7 @@ export default function App() {
           guestListVisible={guestListVisible} onLogout={onLogout}
           theme={theme} onToggleTheme={toggleTheme} />
       </div>
+      <ErrorToast />
     </>
   );
 }

@@ -47,7 +47,10 @@ const apiImpl = {
   async get(key) {
     const r = await fetch(`/api/storage?key=${encodeURIComponent(key)}`);
     if (r.status === 404) return null;
-    if (!r.ok) throw new Error(`get ${key} -> ${r.status}`);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw new Error(`get ${key} -> ${r.status}: ${detail.slice(0, 200)}`);
+    }
     return r.json();
   },
   async set(key, value) {
@@ -56,17 +59,26 @@ const apiImpl = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key, value })
     });
-    if (!r.ok) throw new Error(`set ${key} -> ${r.status}`);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw new Error(`set ${key} -> ${r.status}: ${detail.slice(0, 200)}`);
+    }
     return r.json();
   },
   async delete(key) {
     const r = await fetch(`/api/storage?key=${encodeURIComponent(key)}`, { method: "DELETE" });
-    if (!r.ok) throw new Error(`delete ${key} -> ${r.status}`);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw new Error(`delete ${key} -> ${r.status}: ${detail.slice(0, 200)}`);
+    }
     return r.json();
   },
   async list(prefix) {
     const r = await fetch(`/api/storage/list?prefix=${encodeURIComponent(prefix || "")}`);
-    if (!r.ok) throw new Error(`list ${prefix} -> ${r.status}`);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw new Error(`list ${prefix} -> ${r.status}: ${detail.slice(0, 200)}`);
+    }
     return r.json();
   }
 };
@@ -82,13 +94,26 @@ export const rawStorage = {
 };
 
 // JSON-helper layer (matches what the app's own `storage` helper used to do)
+const emitError = (op, key, err) => {
+  const msg = err?.message || String(err);
+  console.warn(`storage.${op} failed`, key, msg);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("storage:error", {
+      detail: { op, key, message: msg }
+    }));
+  }
+};
+
 export const storage = {
   async get(key) {
     try {
       const r = await rawStorage.get(key);
       return r ? JSON.parse(r.value) : null;
     } catch (err) {
-      console.warn("storage.get failed", key, err);
+      // get is allowed to "fail" (404 means missing) without alarming UI
+      if (!String(err?.message || "").includes("404")) {
+        console.warn("storage.get failed", key, err);
+      }
       return null;
     }
   },
@@ -97,20 +122,20 @@ export const storage = {
       await rawStorage.set(key, JSON.stringify(value));
       return true;
     } catch (err) {
-      console.warn("storage.set failed", key, err);
+      emitError("set", key, err);
       return false;
     }
   },
   async delete(key) {
     try { await rawStorage.delete(key); return true; }
-    catch (err) { console.warn("storage.delete failed", key, err); return false; }
+    catch (err) { emitError("delete", key, err); return false; }
   },
   async list(prefix) {
     try {
       const r = await rawStorage.list(prefix);
       return r?.keys || [];
     } catch (err) {
-      console.warn("storage.list failed", prefix, err);
+      emitError("list", prefix, err);
       return [];
     }
   },

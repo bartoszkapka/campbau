@@ -57,11 +57,11 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(50px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 19s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 22s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 18s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 20s ease-in-out infinite alternate; }
-    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 16s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 17s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 20s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 16s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 18s ease-in-out infinite alternate; }
+    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 14s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0% { transform: translate(0,0) scale(1); }
@@ -130,8 +130,15 @@ const GlobalStyles = () => (
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
     }
-    body.dark .holo-bg-contained, .force-dark .holo-bg-contained {
+    body.dark .holo-bg-contained {
       background: rgba(5, 5, 5, 0.9);
+    }
+    /* Force-dark (drawer): always 95% black, fully opaque, regardless of theme */
+    .force-dark.holo-bg-contained,
+    .force-dark .holo-bg-contained {
+      background: #0d0d0d;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
     /* Drawer is always dark — its container has class "force-dark" */
     .force-dark { color: #fff; }
@@ -146,6 +153,31 @@ const GlobalStyles = () => (
 
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
+
+    /* Hero — image keeps its aspect ratio (no vertical cropping). Height is fixed,
+       width follows naturally from aspect; on narrow screens the image overflows
+       horizontally and gets clipped by the wrapper. On wide screens, animated
+       gradient peeks through on the sides. */
+    .hero-wrapper {
+      height: 580px;
+    }
+    @media (max-width: 768px) {
+      .hero-wrapper { height: 480px; }
+    }
+    .hero-inner {
+      position: absolute;
+      inset: 0;
+    }
+    .hero-inner img {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 100%;
+      width: auto;
+      max-width: none;
+    }
 
     .fade-in { animation: fadeIn 0.3s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -758,7 +790,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
 const PageHeader = ({ title, subtitle, action }) => (
   <div className="px-5 pt-8 pb-6">
     <div className="flex items-start justify-between gap-4 mb-2">
-      <h1 className="font-display text-4xl sm:text-5xl font-bold uppercase leading-none">{title}</h1>
+      <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none">{title}</h1>
       {action}
     </div>
     {subtitle && <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-3">{subtitle}</p>}
@@ -1043,31 +1075,6 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
 
   return (
     <div className="pb-20">
-      {/* Hero — full viewport width, 580px tall, starts at top of viewport (under sticky header).
-          The negative top margin pulls it under the 80px-tall header so the header overlays it.
-          The negative left margin + 100vw width breaks out of the parent's max-w-7xl.
-          Image overflows the box by 8px on each side using integer pixel values to avoid
-          Safari's sub-pixel rounding bleed at the edges. Transparent areas of the SVG still
-          let the gradient peek through, but the very edges are guaranteed covered. */}
-      <div
-        className="relative -mt-20 left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden"
-        style={{ height: "580px" }}
-      >
-        <img
-          src="/cb26_hero.svg"
-          alt="Camp Bau 26"
-          className="absolute select-none pointer-events-none"
-          style={{
-            top: "-8px",
-            left: "-8px",
-            width: "calc(100% + 16px)",
-            height: "calc(100% + 16px)",
-            objectFit: "cover"
-          }}
-          draggable={false}
-        />
-      </div>
-
       <div className="px-5 pt-8">
         {miejsceLoaded && (
           <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
@@ -1078,7 +1085,7 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
               className="border border-black p-6 text-left hover:bg-black hover:text-white transition-colors group min-h-[160px] flex flex-col justify-between">
               <div className="text-4xl leading-none mb-6">{t.symbol}</div>
               <div>
-                <div className="font-display text-xl mb-1">{t.title}</div>
+                <div className="font-display text-lg mb-1">{t.title}</div>
                 <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
               </div>
             </button>
@@ -2411,6 +2418,24 @@ export default function App() {
           onMenuOpen={() => setDrawerOpen(true)} onLogout={onLogout}
           theme={theme} onToggleTheme={toggleTheme}
           forceDark={view === "home"} />
+        {/* Hero — only on home. Full document width (avoids 100vw/scrollbar issues on
+            iOS Safari). Pulled up under the 80px sticky header with -mt-20.
+            Aspect-preserving display: image is rendered at its natural aspect ratio,
+            cropped horizontally on narrow screens. Height is responsive. */}
+        {view === "home" && (
+          <div
+            className="relative -mt-20 w-full overflow-hidden hero-wrapper"
+          >
+            <div className="hero-inner">
+              <img
+                src="/cb26_hero.svg"
+                alt="Camp Bau 26"
+                className="block select-none pointer-events-none"
+                draggable={false}
+              />
+            </div>
+          </div>
+        )}
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={

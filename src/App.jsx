@@ -56,11 +56,11 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(50px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 32s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 38s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 30s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 34s ease-in-out infinite alternate; }
-    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 26s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 24s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 28s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 22s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 25s ease-in-out infinite alternate; }
+    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 20s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0% { transform: translate(0,0) scale(1); }
@@ -612,19 +612,41 @@ const NAV_ITEMS = [
   { id: "cnoty", label: "Cnoty kosmiczne" },
   { id: "festiwal", label: "O Festiwalu" },
   { id: "miejsce", label: "Miejsce" },
-  { id: "profile", label: "Profil" },
+  { id: "profile", label: "Profil", drawerFooter: true },
   { id: "goscie", label: "Goście" },
   { id: "admin", label: "Admin", adminOnly: true },
 ];
 
-const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, onLogout, theme, onToggleTheme }) => {
+const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, onLogout, theme, onToggleTheme, forceDark = false }) => {
   const items = NAV_ITEMS.filter(it => {
     if (it.adminOnly && user.role !== "admin") return false;
     if (it.id === "goscie" && user.role !== "admin" && !guestListVisible) return false;
     return true;
   });
+
+  // Track scroll position. Header becomes opaque after a small threshold.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // When over a forced-dark hero, behave like dark mode visually regardless of theme.
+  const overHero = forceDark && !scrolled;
+  // Background: opaque after scroll, transparent at top
+  const bgClass = scrolled
+    ? (theme === "dark" ? "bg-black border-b border-black/30" : "bg-white border-b border-black/10")
+    : "bg-transparent";
+  // Foreground: white over hero, otherwise inherit
+  const fg = overHero ? "text-white" : "";
+  const borderColor = overHero ? "border-white" : "border-black";
+  const navHoverBorder = overHero ? "hover:border-white" : "hover:border-black";
+  const activeBg = overHero ? "bg-white text-black border-white" : "bg-black text-white border-black";
+
   return (
-    <header className="sticky top-0 z-30 bg-transparent">
+    <header className={`sticky top-0 z-30 transition-colors duration-200 ${bgClass} ${fg}`}>
       <div className="flex items-center gap-4 px-5 h-20 max-w-7xl mx-auto">
         <button onClick={() => onNavigate("home")} className="flex items-center shrink-0" aria-label="Home">
           <Logo style={{ height: "36px", width: "auto" }} />
@@ -635,26 +657,31 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
             const active = currentView === it.id || (currentView === "stacja-detail" && it.id === "stacje");
             return (
               <button key={it.id} onClick={() => onNavigate(it.id)}
-                className={`font-display text-xs px-3 py-2 border transition-colors shrink-0 ${active ? "bg-black text-white border-black" : "border-transparent hover:border-black"}`}>
+                className={`font-display text-xs px-3 py-2 border transition-colors shrink-0 ${active ? activeBg : `border-transparent ${navHoverBorder}`}`}>
                 {it.label}
               </button>
             );
           })}
         </nav>
         {/* Theme toggle — always visible */}
-        <ThemeToggle theme={theme} onToggle={onToggleTheme} className="ml-auto lg:ml-0" />
+        <button onClick={onToggleTheme}
+          className={`border ${borderColor} w-11 h-11 flex items-center justify-center text-lg shrink-0 transition-colors ml-auto lg:ml-0 ${overHero ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white"}`}
+          aria-label="Toggle theme">
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
         {/* Desktop logout */}
         <button onClick={onLogout}
-          className="hidden lg:inline-flex font-display text-xs px-4 py-2 border border-black hover:bg-black hover:text-white shrink-0">
+          className={`hidden lg:inline-flex font-display text-xs px-4 py-2 border ${borderColor} shrink-0 transition-colors ${overHero ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white"}`}>
           Wyloguj
         </button>
         {/* Mobile hamburger */}
         <button onClick={onMenuOpen}
-          className="lg:hidden border border-black w-11 h-11 flex items-center justify-center shrink-0 hover:bg-black hover:text-white" aria-label="Menu">
+          className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 transition-colors ${overHero ? "hover:bg-white hover:text-black" : "hover:bg-black hover:text-white"}`}
+          aria-label="Menu">
           <div className="space-y-1.5">
-            <div className="w-5 h-0.5 bg-black" />
-            <div className="w-5 h-0.5 bg-black" />
-            <div className="w-5 h-0.5 bg-black" />
+            <div className={`w-5 h-0.5 ${overHero ? "bg-white" : "bg-black"}`} />
+            <div className={`w-5 h-0.5 ${overHero ? "bg-white" : "bg-black"}`} />
+            <div className={`w-5 h-0.5 ${overHero ? "bg-white" : "bg-black"}`} />
           </div>
         </button>
       </div>
@@ -665,21 +692,23 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
 const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible, onLogout, theme, onToggleTheme }) => {
   if (!open) return null;
   const items = NAV_ITEMS.filter(it => {
+    if (it.drawerFooter) return false; // shown separately as avatar block
     if (it.adminOnly && user.role !== "admin") return false;
     if (it.id === "goscie" && user.role !== "admin" && !guestListVisible) return false;
     return true;
   });
+  const profileActive = currentView === "profile";
   return (
     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <aside className="absolute right-0 top-0 bottom-0 w-full max-w-sm holo-bg-contained border-l border-black drawer-enter" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 h-14 border-b border-black bg-black text-white">
+      <aside className="absolute right-0 top-0 bottom-0 w-full max-w-sm holo-bg-contained border-l border-black drawer-enter overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 h-14 border-b border-black bg-black text-white sticky top-0 z-10">
           <span className="font-display">Menu</span>
           <button onClick={onClose} className="text-2xl leading-none p-1" aria-label="Close">✕</button>
         </div>
         <nav className="p-5 space-y-1">
           {items.map(it => (
             <button key={it.id} onClick={() => { onNavigate(it.id); onClose(); }}
-              className={`block w-full text-left font-display text-2xl py-3 border-b border-black/20 transition-opacity ${currentView === it.id ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
+              className={`block w-full text-left font-display text-xl py-3 border-b border-black/20 transition-opacity ${currentView === it.id ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
               {currentView === it.id && <span className="mr-2">·</span>}{it.label}
             </button>
           ))}
@@ -691,11 +720,24 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
             {theme === "dark" ? "☀ Jasny" : "☾ Ciemny"}
           </button>
         </div>
-        <div className="px-5 py-5 border-t border-black">
-          <div className="font-mono text-xs uppercase tracking-widest mb-2 opacity-70">Zalogowano jako</div>
-          <div className="font-display">{user.firstName || user.username} {user.lastName}</div>
-          <div className="font-mono text-xs opacity-60 mb-4">@{user.username} {user.role === "admin" && "· admin"}</div>
-          <Button variant="outline" size="sm" onClick={onLogout} className="w-full">Wyloguj</Button>
+        {/* Profile entry — avatar + name + logout */}
+        <div className="border-t border-black">
+          <button onClick={() => { onNavigate("profile"); onClose(); }}
+            className={`w-full px-5 py-4 flex items-center gap-3 text-left transition-colors hover:bg-black/5 ${profileActive ? "bg-black/5" : ""}`}>
+            <div className="w-12 h-12 border border-black overflow-hidden shrink-0">
+              {user.profilePicture
+                ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center font-display text-lg">{(user.firstName || user.username)[0]?.toUpperCase()}</div>}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display truncate">{user.firstName || user.username} {user.lastName}</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">@{user.username}{user.role === "admin" && " · admin"}</div>
+            </div>
+            <div className="font-mono text-xs uppercase tracking-widest opacity-50 shrink-0">Profil →</div>
+          </button>
+          <div className="px-5 pb-5">
+            <Button variant="outline" size="sm" onClick={onLogout} className="w-full">Wyloguj</Button>
+          </div>
         </div>
       </aside>
     </div>
@@ -868,6 +910,9 @@ const MoonSvg = ({ phase, size = 36 }) => {
 
 const SunsetWidget = ({ lat, lng, locationName }) => {
   const [now, setNow] = useState(() => new Date());
+  const scrollRef = useRef(null);
+  const tilesRef = useRef([]);
+  const didScrollRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60 * 1000);
@@ -878,12 +923,13 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
     ? computeSunTimes(now, lat, lng)
     : null;
 
+  const moon = computeMoonPhase(now);
   const fmtTime = (d) => d ? d.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" }) : "—";
   const todayStr = now.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
 
   if (!data) {
     return (
-      <div className="border border-black p-5 mb-4">
+      <div className="border border-black p-5 mb-6">
         <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-center py-4">
           Brak współrzędnych
         </div>
@@ -904,27 +950,55 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
     { icon: "☾", type: "Noc",      name: "dołowanie",     date: data.solarMidnight },
   ];
 
-  // Highlight the next upcoming event
+  // Index of current/next event — for highlight AND auto-scroll target
   const nowMs = now.getTime();
-  const nextIdx = events.findIndex(e => e.date && e.date.getTime() > nowMs);
+  let activeIdx = events.findIndex(e => e.date && e.date.getTime() > nowMs);
+  if (activeIdx === -1) activeIdx = events.length - 1; // past last event of today
+
+  // Auto-scroll to active event tile after first paint
+  useEffect(() => {
+    if (didScrollRef.current) return;
+    const container = scrollRef.current;
+    const target = tilesRef.current[activeIdx];
+    if (!container || !target) return;
+    // Center the active tile horizontally within the container
+    const containerWidth = container.clientWidth;
+    const tileLeft = target.offsetLeft;
+    const tileWidth = target.offsetWidth;
+    const desired = Math.max(0, tileLeft - (containerWidth - tileWidth) / 2);
+    container.scrollLeft = desired;
+    didScrollRef.current = true;
+  }, [activeIdx]);
 
   return (
-    <div className="border border-black p-5 mb-4">
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{todayStr}</span>
-        {locationName && (
-          <>
-            <span className="font-mono text-[10px] opacity-40">·</span>
-            <span className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">{locationName}</span>
-          </>
-        )}
+    <div className="border border-black p-5 mb-6">
+      {/* Header row — date/location on left, moon in upper right */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{todayStr}</span>
+          {locationName && (
+            <>
+              <span className="font-mono text-[10px] opacity-40">·</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">{locationName}</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0" title={`${moon.name} · ${Math.round(moon.illumination * 100)}%`}>
+          <div className="text-right">
+            <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 leading-none">Księżyc</div>
+            <div className="font-mono text-[9px] uppercase tracking-widest opacity-60 leading-none mt-0.5 truncate max-w-[110px]">{moon.name}</div>
+          </div>
+          <MoonSvg phase={moon.phase} size={28} />
+        </div>
       </div>
-      <div className="overflow-x-auto no-scrollbar"
+      <div ref={scrollRef}
+        className="overflow-x-auto no-scrollbar"
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}>
         <div className="flex gap-3" style={{ width: "max-content" }}>
           {events.map((e, i) => (
             <div key={i}
-              className={`border border-black p-3 w-32 shrink-0 flex flex-col h-32 transition-colors ${i === nextIdx ? "bg-black text-white" : ""}`}>
+              ref={(el) => { tilesRef.current[i] = el; }}
+              className={`border border-black p-3 w-32 shrink-0 flex flex-col h-32 transition-colors ${i === activeIdx ? "bg-black text-white" : ""}`}>
               <div className="text-2xl leading-none">{e.icon}</div>
               <div className="mt-auto">
                 <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{e.type}</div>
@@ -939,39 +1013,12 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
   );
 };
 
-const MoonWidget = () => {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60 * 60 * 1000); // hourly is enough
-    return () => clearInterval(id);
-  }, []);
-
-  const moon = computeMoonPhase(now);
-
-  return (
-    <div className="border border-black p-5 mb-6">
-      <div className="flex items-center gap-5">
-        <MoonSvg phase={moon.phase} size={72} />
-        <div className="min-w-0 flex-1">
-          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">Księżyc</div>
-          <div className="font-display text-2xl mt-1 leading-tight">{moon.name}</div>
-          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-2">
-            {Math.round(moon.illumination * 100)}% oświetlenia
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const HomeView = ({ user, guestListVisible, onNavigate }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
     if (t.conditional === "guests") return user.role === "admin" || guestListVisible;
     return true;
   });
-  const displayName = user.firstName || user.username;
   const [miejsce, setMiejsce] = useState(null);
   const [miejsceLoaded, setMiejsceLoaded] = useState(false);
 
@@ -987,27 +1034,40 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
   const locationName = miejsce?.mapQuery || "Grójec, Polska";
 
   return (
-    <div className="pb-20 px-5 pt-4">
-      <div className="py-10 border-b border-black mb-6">
-        <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">Witaj</div>
-        <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl leading-[0.9] break-words">{displayName}</h1>
-        <p className="mt-4 text-sm opacity-80 max-w-lg">Camp Bau — trzy dni, jedna łąka, jedno niebo. Sprawdź, co się dzieje i dodaj coś od siebie.</p>
+    <div className="pb-20">
+      {/* Hero — full viewport width, 560px tall, starts at top of viewport (under sticky header).
+          The negative top margin pulls it under the 80px-tall header so the header overlays it.
+          The negative left margin + 100vw width breaks out of the parent's max-w-7xl.
+          object-cover scales the image to fill the box, cropping sides on narrow screens
+          and scaling up on wider screens — gradient peeks through transparent parts. */}
+      <div
+        className="relative -mt-20 left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen overflow-hidden"
+        style={{ height: "560px" }}
+      >
+        <img
+          src="/cb26_hero.svg"
+          alt="Camp Bau 26"
+          className="w-full h-full object-cover select-none pointer-events-none"
+          draggable={false}
+        />
       </div>
-      {miejsceLoaded && (
-        <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
-      )}
-      <MoonWidget />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {tiles.map(t => (
-          <button key={t.id} onClick={() => onNavigate(t.id)}
-            className="border border-black p-6 text-left hover:bg-black hover:text-white transition-colors group min-h-[160px] flex flex-col justify-between">
-            <div className="text-4xl leading-none mb-6">{t.symbol}</div>
-            <div>
-              <div className="font-display text-2xl mb-1">{t.title}</div>
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
-            </div>
-          </button>
-        ))}
+
+      <div className="px-5 pt-8">
+        {miejsceLoaded && (
+          <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {tiles.map(t => (
+            <button key={t.id} onClick={() => onNavigate(t.id)}
+              className="border border-black p-6 text-left hover:bg-black hover:text-white transition-colors group min-h-[160px] flex flex-col justify-between">
+              <div className="text-4xl leading-none mb-6">{t.symbol}</div>
+              <div>
+                <div className="font-display text-xl mb-1">{t.title}</div>
+                <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -2333,7 +2393,8 @@ export default function App() {
         <Header user={user} guestListVisible={guestListVisible}
           currentView={view} onNavigate={navigate}
           onMenuOpen={() => setDrawerOpen(true)} onLogout={onLogout}
-          theme={theme} onToggleTheme={toggleTheme} />
+          theme={theme} onToggleTheme={toggleTheme}
+          forceDark={view === "home"} />
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={

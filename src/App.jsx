@@ -2716,9 +2716,115 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
 };
 
 // ============================================================
+// ATTENDANCE CALENDAR — displays festival days with the user's
+// per-day attendance state. Tapping a tile opens an inline picker
+// to set yes / maybe / no for that day. Saves to the user record.
+// ============================================================
+const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
+  const [openDay, setOpenDay] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  // Generate festival days
+  const days = (() => {
+    if (!startDate || !endDate) return [];
+    const start = new Date(startDate + "T12:00");
+    const end = new Date(endDate + "T12:00");
+    if (start > end) return [];
+    const result = [];
+    const cur = new Date(start);
+    let safety = 0;
+    while (cur <= end && safety < 100) {
+      result.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+      safety++;
+    }
+    return result;
+  })();
+
+  if (days.length === 0) return null;
+
+  const attendance = user.attendance || {};
+  const setAttendance = async (day, value) => {
+    if (saving) return;
+    setSaving(true);
+    const next = { ...attendance };
+    if (next[day] === value) delete next[day];
+    else next[day] = value;
+    const updated = { ...user, attendance: next };
+    const ok = await storage.set("user:" + user.username, updated);
+    if (ok) onUpdate?.(updated);
+    setSaving(false);
+    setOpenDay(null);
+  };
+
+  const fmtWeekday = (s) => new Date(s + "T12:00").toLocaleDateString("pl-PL", { weekday: "short" }).replace(".", "");
+  const fmtDay = (s) => new Date(s + "T12:00").getDate();
+  const fmtMonth = (s) => new Date(s + "T12:00").toLocaleDateString("pl-PL", { month: "short" }).replace(".", "");
+
+  // Visual style per attendance state
+  const stateStyle = {
+    yes:    "bg-black text-white border-black",
+    maybe:  "border-black border-dashed",
+    no:     "border-black opacity-40",
+    empty:  "border-black hover:bg-black/5",
+  };
+  const stateIcon = { yes: "✓", maybe: "?", no: "✗" };
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70">Twoja obecność</div>
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60">Stuknij dzień, aby zaznaczyć</div>
+      </div>
+      <div className="overflow-x-auto no-scrollbar -mx-5 px-5"
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
+        <div className="flex gap-2" style={{ width: "max-content" }}>
+          {days.map(day => {
+            const status = attendance[day] || "empty";
+            const isOpen = openDay === day;
+            const tileClass = stateStyle[status];
+            const icon = stateIcon[status];
+            return (
+              <div key={day} className="flex flex-col items-center gap-1 shrink-0">
+                <button onClick={() => setOpenDay(isOpen ? null : day)}
+                  className={`w-16 border px-2 py-2 text-center transition-colors ${tileClass}`}>
+                  <div className="font-mono text-[8px] uppercase tracking-widest opacity-80">{fmtWeekday(day)}</div>
+                  <div className="font-display text-lg leading-none my-1">{fmtDay(day)}</div>
+                  <div className="font-mono text-[8px] uppercase tracking-widest opacity-80">{fmtMonth(day)}</div>
+                  {icon && <div className="font-display text-base leading-none mt-1">{icon}</div>}
+                </button>
+                {isOpen && (
+                  <div className="flex flex-col gap-1 w-16">
+                    {[
+                      { value: "yes",   label: "✓ Tak" },
+                      { value: "maybe", label: "? Może" },
+                      { value: "no",    label: "✗ Nie" },
+                    ].map(opt => {
+                      const selected = attendance[day] === opt.value;
+                      return (
+                        <button key={opt.value}
+                          onClick={() => setAttendance(day, opt.value)}
+                          disabled={saving}
+                          className={`font-display text-[10px] py-1.5 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+// ============================================================
 // MIEJSCE VIEW
 // ============================================================
-const MiejsceView = ({ user }) => {
+const MiejsceView = ({ user, onUpdate }) => {
   const [data, setData] = useState({ photos: [], address: "", mapQuery: "", contact: "", lat: null, lng: null, startDate: "", endDate: "" });
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
@@ -2785,6 +2891,9 @@ const MiejsceView = ({ user }) => {
                 <div className="font-mono text-xs uppercase tracking-widest mb-2 opacity-70">Kiedy</div>
                 <div className="font-display text-2xl">{dateRangeText}</div>
               </Card>
+            )}
+            {data.startDate && data.endDate && (
+              <AttendanceCalendar user={user} startDate={data.startDate} endDate={data.endDate} onUpdate={onUpdate} />
             )}
             {data.photos.length > 0 && (
               <div className="grid grid-cols-2 gap-3">
@@ -3557,7 +3666,7 @@ export default function App() {
             } />
             <Route path="/stacje/:id" element={<StacjaDetailRoute />} />
             <Route path="/festiwal" element={<FestiwalView user={user} />} />
-            <Route path="/miejsce" element={<MiejsceView user={user} />} />
+            <Route path="/miejsce" element={<MiejsceView user={user} onUpdate={onUpdateUser} />} />
             <Route path="/profil" element={
               <ProfileView user={user} onUpdate={onUpdateUser}
                 animated={animated} onToggleAnimated={toggleAnimated}

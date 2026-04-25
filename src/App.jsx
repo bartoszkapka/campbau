@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate, useLocation, useParams, Routes, Route, Navigate } from "react-router-dom";
 import { storage } from "./storage.js";
 
 // ============================================================
@@ -2111,11 +2112,37 @@ export default function App() {
   const [initError, setInitError] = useState(null);
   const [user, setUser] = useState(null);
   const [users, setUsers] = useState([]);
-  const [view, setView] = useState("home");
-  const [stacjaId, setStacjaId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guestListVisible, setGuestListVisible] = useState(false);
   const [stacjeRefreshKey, setStacjeRefreshKey] = useState(0);
+
+  // Router integration
+  const routerNavigate = useNavigate();
+  const location = useLocation();
+
+  // Map between view ids (used by Header/Drawer/HomeView for active states)
+  // and URL paths.
+  const VIEW_TO_PATH = {
+    home: "/",
+    wydarzenia: "/wydarzenia",
+    stacje: "/stacje",
+    cnoty: "/cnoty",
+    festiwal: "/festiwal",
+    miejsce: "/miejsce",
+    profile: "/profil",
+    goscie: "/goscie",
+    admin: "/admin",
+  };
+  const pathToView = (pathname) => {
+    if (pathname === "/" || pathname === "") return "home";
+    const seg = pathname.split("/")[1];
+    if (seg === "stacje") {
+      return pathname.split("/").length > 2 ? "stacja-detail" : "stacje";
+    }
+    if (seg === "profil") return "profile";
+    return seg || "home";
+  };
+  const view = pathToView(location.pathname);
   const [theme, setTheme] = useState(() => {
     try {
       const saved = localStorage.getItem("campbau:theme");
@@ -2232,7 +2259,7 @@ export default function App() {
 
   const onLogin = async (u) => {
     setUser(u);
-    setView("home");
+    routerNavigate("/");
     try { localStorage.setItem("campbau:session", u.username); } catch {}
     const s = await storage.get("settings");
     setGuestListVisible(!!s?.guestListVisible);
@@ -2241,7 +2268,7 @@ export default function App() {
   const onLogout = () => {
     setUser(null);
     setDrawerOpen(false);
-    setView("home");
+    routerNavigate("/");
     try { localStorage.removeItem("campbau:session"); } catch {}
   };
 
@@ -2258,13 +2285,12 @@ export default function App() {
   };
 
   const navigate = (v) => {
-    setView(v);
-    setStacjaId(null);
+    const path = VIEW_TO_PATH[v] || "/";
+    routerNavigate(path);
   };
 
   const openStacjaDetail = (id) => {
-    setStacjaId(id);
-    setView("stacja-detail");
+    routerNavigate("/stacje/" + encodeURIComponent(id));
   };
 
   if (!initialized || !sessionRestored) {
@@ -2289,40 +2315,15 @@ export default function App() {
     );
   }
 
-  let content = null;
-  switch (view) {
-    case "home":
-      content = <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} />; break;
-    case "wydarzenia":
-      content = <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />; break;
-    case "stacje":
-      content = <StacjeView key={stacjeRefreshKey} user={user} users={users} onOpenDetail={openStacjaDetail} />; break;
-    case "stacja-detail":
-      content = <StacjaDetailView stacjaId={stacjaId} user={user} users={users}
-        onBack={() => { setView("stacje"); setStacjaId(null); }}
-        onRefresh={() => setStacjeRefreshKey(k => k + 1)} />; break;
-    case "cnoty":
-      content = <CnotyView user={user} />; break;
-    case "festiwal":
-      content = <FestiwalView user={user} />; break;
-    case "miejsce":
-      content = <MiejsceView user={user} />; break;
-    case "profile":
-      content = <ProfileView user={user} onUpdate={onUpdateUser}
-        animated={animated} onToggleAnimated={toggleAnimated}
-        theme={theme} onToggleTheme={toggleTheme} />; break;
-    case "goscie":
-      if (user.role !== "admin" && !guestListVisible) { content = <EmptyState message="Brak dostępu" />; }
-      else content = <GoscieView user={user} users={users} />;
-      break;
-    case "admin":
-      if (user.role !== "admin") { content = <EmptyState message="Brak dostępu" />; }
-      else content = <AdminView user={user} users={users} onReloadUsers={loadUsers}
-        guestListVisible={guestListVisible} onToggleGuestList={onToggleGuestList} />;
-      break;
-    default:
-      content = <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} />;
-  }
+  // Adapter: read :id param from URL, pass to existing StacjaDetailView
+  const StacjaDetailRoute = () => {
+    const { id } = useParams();
+    return (
+      <StacjaDetailView stacjaId={id} user={user} users={users}
+        onBack={() => routerNavigate("/stacje")}
+        onRefresh={() => setStacjeRefreshKey(k => k + 1)} />
+    );
+  };
 
   return (
     <>
@@ -2333,7 +2334,40 @@ export default function App() {
           currentView={view} onNavigate={navigate}
           onMenuOpen={() => setDrawerOpen(true)} onLogout={onLogout}
           theme={theme} onToggleTheme={toggleTheme} />
-        <main className="fade-in max-w-7xl mx-auto" key={view + stacjaId}>{content}</main>
+        <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
+          <Routes>
+            <Route path="/" element={
+              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} />
+            } />
+            <Route path="/wydarzenia" element={
+              <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />
+            } />
+            <Route path="/stacje" element={
+              <StacjeView key={stacjeRefreshKey} user={user} users={users} onOpenDetail={openStacjaDetail} />
+            } />
+            <Route path="/stacje/:id" element={<StacjaDetailRoute />} />
+            <Route path="/cnoty" element={<CnotyView user={user} />} />
+            <Route path="/festiwal" element={<FestiwalView user={user} />} />
+            <Route path="/miejsce" element={<MiejsceView user={user} />} />
+            <Route path="/profil" element={
+              <ProfileView user={user} onUpdate={onUpdateUser}
+                animated={animated} onToggleAnimated={toggleAnimated}
+                theme={theme} onToggleTheme={toggleTheme} />
+            } />
+            <Route path="/goscie" element={
+              user.role === "admin" || guestListVisible
+                ? <GoscieView user={user} users={users} />
+                : <EmptyState message="Brak dostępu" />
+            } />
+            <Route path="/admin" element={
+              user.role === "admin"
+                ? <AdminView user={user} users={users} onReloadUsers={loadUsers}
+                    guestListVisible={guestListVisible} onToggleGuestList={onToggleGuestList} />
+                : <EmptyState message="Brak dostępu" />
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
         <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
           currentView={view} onNavigate={navigate} user={user}
           guestListVisible={guestListVisible} onLogout={onLogout}

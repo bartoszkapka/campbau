@@ -290,22 +290,36 @@ const truncateGraphemes = (str, max = 1) => {
 };
 
 // Detects when a sticky-positioned element is "stuck" to the top of the viewport.
-// Place a 1px sentinel just before the sticky element and pass its ref here.
-// Pass the sticky element's top offset in pixels (e.g. 80 for `top-20`).
-// Returns true while the sticky element is pinned.
-const useStickyDetect = (sentinelRef, topOffset = 80) => {
+// Returns [stuck, setRef]. Use setRef as the `ref` prop on a 1px sentinel placed
+// just before the sticky element. The callback ref ensures the observer attaches
+// the moment the sentinel mounts — critical because content (events, sections)
+// often loads async, so a useRef + useEffect-on-mount approach would register
+// before the sentinel exists and never fire.
+const useStickyDetect = (topOffset = 80) => {
   const [stuck, setStuck] = useState(false);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
+  const observerRef = useRef(null);
+
+  const setRef = useCallback((node) => {
+    // Tear down any previous observer (handles ref reassignment on remount)
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (!node) return;
+    const obs = new IntersectionObserver(
       ([entry]) => setStuck(!entry.isIntersecting),
       { rootMargin: `-${topOffset + 1}px 0px 0px 0px`, threshold: 0 }
     );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [sentinelRef, topOffset]);
-  return stuck;
+    obs.observe(node);
+    observerRef.current = obs;
+  }, [topOffset]);
+
+  // Cleanup on hook unmount
+  useEffect(() => () => {
+    if (observerRef.current) observerRef.current.disconnect();
+  }, []);
+
+  return [stuck, setRef];
 };
 
 const resizeImage = (file, maxSize = 1000) => new Promise((resolve, reject) => {
@@ -840,14 +854,17 @@ const EmptyState = ({ message }) => (
 // ============================================================
 // HOME VIEW — landing page with page tiles
 // ============================================================
+// Home grid tiles. The `icon` here is the *default* emoji — admin can override
+// any of these via the home_tiles storage record (see AdminView). Anything not
+// overridden falls back to the default below.
 const HOME_TILES = [
-  { id: "wydarzenia", symbol: "☽", title: "Wydarzenia", desc: "Plan festiwalu chronologicznie" },
-  { id: "stacje", symbol: "◉", title: "Stacje kosmiczne", desc: "Aktywności uczestników" },
-  { id: "festiwal", symbol: "☄", title: "O Festiwalu", desc: "Koncept, zasady, FAQ" },
-  { id: "miejsce", symbol: "▲", title: "Gdzie i kiedy", desc: "Lokalizacja, dojazd, kontakt" },
-  { id: "profile", symbol: "◊", title: "Profil", desc: "Twoje konto i zdjęcie" },
-  { id: "goscie", symbol: "❋", title: "Goście", desc: "Lista uczestników", conditional: "guests" },
-  { id: "admin", symbol: "✺", title: "Admin", desc: "Zarządzanie aplikacją", conditional: "admin" },
+  { id: "wydarzenia", icon: "📅", title: "Wydarzenia", desc: "Plan festiwalu chronologicznie" },
+  { id: "stacje", icon: "🛸", title: "Stacje kosmiczne", desc: "Aktywności uczestników" },
+  { id: "festiwal", icon: "🌌", title: "O Festiwalu", desc: "Koncept, zasady, FAQ" },
+  { id: "miejsce", icon: "📍", title: "Gdzie i kiedy", desc: "Lokalizacja, dojazd, kontakt" },
+  { id: "profile", icon: "👤", title: "Profil", desc: "Twoje konto i zdjęcie" },
+  { id: "goscie", icon: "👥", title: "Goście", desc: "Lista uczestników", conditional: "guests" },
+  { id: "admin", icon: "⚙️", title: "Admin", desc: "Zarządzanie aplikacją", conditional: "admin" },
 ];
 
 // ============================================================
@@ -1011,16 +1028,16 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
   }
 
   const events = [
-    { icon: "✦", type: "Świt",     name: "astronomiczny", date: data.astroDawn },
-    { icon: "⋆", type: "Świt",     name: "nautyczny",     date: data.nauticalDawn },
-    { icon: "◐", type: "Świt",     name: "cywilny",       date: data.civilDawn },
-    { icon: "▲", type: "Słońce",   name: "wschód",        date: data.sunrise },
-    { icon: "☀", type: "Słońce",   name: "górowanie",     date: data.solarNoon },
-    { icon: "▼", type: "Słońce",   name: "zachód",        date: data.sunset },
-    { icon: "◑", type: "Zmierzch", name: "cywilny",       date: data.civilDusk },
-    { icon: "⋆", type: "Zmierzch", name: "nautyczny",     date: data.nauticalDusk },
-    { icon: "✦", type: "Zmierzch", name: "astronomiczny", date: data.astroDusk },
-    { icon: "☾", type: "Noc",      name: "dołowanie",     date: data.solarMidnight },
+    { type: "Świt",     name: "astronomiczny", date: data.astroDawn },
+    { type: "Świt",     name: "nautyczny",     date: data.nauticalDawn },
+    { type: "Świt",     name: "cywilny",       date: data.civilDawn },
+    { type: "Słońce",   name: "wschód",        date: data.sunrise },
+    { type: "Słońce",   name: "górowanie",     date: data.solarNoon },
+    { type: "Słońce",   name: "zachód",        date: data.sunset },
+    { type: "Zmierzch", name: "cywilny",       date: data.civilDusk },
+    { type: "Zmierzch", name: "nautyczny",     date: data.nauticalDusk },
+    { type: "Zmierzch", name: "astronomiczny", date: data.astroDusk },
+    { type: "Noc",      name: "dołowanie",     date: data.solarMidnight },
   ];
 
   // Index of LAST event that has already happened (current solar phase)
@@ -1075,12 +1092,9 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
             <div key={i}
               ref={(el) => { tilesRef.current[i] = el; }}
               className={`border border-black p-2.5 w-28 shrink-0 flex flex-col h-28 transition-colors ${i === activeIdx ? "bg-black text-white" : ""}`}>
-              <div className="text-xl leading-none">{e.icon}</div>
-              <div className="mt-auto">
-                <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{e.type}</div>
-                <div className="text-xs leading-tight mt-0.5 truncate">{e.name}</div>
-                <div className="font-display text-base mt-1 leading-none">{fmtTime(e.date)}</div>
-              </div>
+              <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{e.type}</div>
+              <div className="text-xs leading-tight mt-0.5 truncate">{e.name}</div>
+              <div className="font-display text-2xl mt-auto leading-none">{fmtTime(e.date)}</div>
             </div>
           ))}
         </div>
@@ -1345,7 +1359,7 @@ const isAttendanceComplete = (user, startDate, endDate) => {
   return true;
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate, onUpdate }) => {
+const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {} }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
     if (t.conditional === "guests") return user.role === "admin" || guestListVisible;
@@ -1391,16 +1405,19 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate }) => {
           <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {tiles.map(t => (
-            <button key={t.id} onClick={() => onNavigate(t.id)}
-              className="border border-black p-6 text-left hover:bg-black hover:text-white transition-colors group min-h-[160px] flex flex-col justify-between">
-              <div className="text-4xl leading-none mb-6">{t.symbol}</div>
-              <div>
-                <div className="font-display text-lg mb-1">{t.title}</div>
-                <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
-              </div>
-            </button>
-          ))}
+          {tiles.map(t => {
+            const icon = homeTilesOverrides[t.id] || t.icon;
+            return (
+              <button key={t.id} onClick={() => onNavigate(t.id)}
+                className="border border-black p-6 text-left hover:bg-black hover:text-white transition-colors group min-h-[160px] flex flex-col justify-between">
+                <div className="text-5xl leading-none mb-6 emoji-mono">{icon}</div>
+                <div>
+                  <div className="font-display text-lg mb-1">{t.title}</div>
+                  <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1410,7 +1427,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate }) => {
 // ============================================================
 // STACJE KOSMICZNE VIEW
 // ============================================================
-const StacjeView = ({ user, users, onOpenDetail }) => {
+const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
   const [items, setItems] = useState([]);
   const [intro, setIntro] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1461,11 +1478,11 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
   return (
     <div className="pb-20">
       <PageHeader title="Stacje kosmiczne"
-        subtitle={`${items.length} ${items.length === 1 ? "stacja" : items.length > 4 ? "stacji" : "stacje"}`}
+        subtitle={(listVisible || isAdmin) ? `${items.length} ${items.length === 1 ? "stacja" : items.length > 4 ? "stacji" : "stacje"}` : null}
         action={<Button size="sm" onClick={() => setFormOpen(true)}>+ Dodaj</Button>} />
       {(intro || isAdmin) && (
         <div className="px-5 mb-6">
-          <div className="border border-black p-5 relative">
+          <div className="p-5 relative">
             {isAdmin && (
               <button onClick={() => setIntroOpen(true)}
                 className="absolute top-3 right-3 font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
@@ -1482,20 +1499,37 @@ const StacjeView = ({ user, users, onOpenDetail }) => {
           </div>
         </div>
       )}
-      {loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
+      {/* Show the list to admins always (so they can manage it). For non-admins
+          it's gated behind the `listVisible` setting. The intro/description
+          card above is unaffected and remains visible. */}
+      {!listVisible && !isAdmin ? null
+        : loading ? <div className="flex justify-center py-10"><div className="spinner" /></div>
         : items.length === 0 ? <EmptyState message="Brak stacji" />
         : (
-          <div className="px-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {items.map(it => {
-              // Mystery view = hidden visibility, and the viewer isn't admin or owner
-              const isOwner = it.owners?.includes(user.id);
-              const mystery = it.visibility === "hidden" && !isAdmin && !isOwner;
-              return (
-                <StacjaCard key={it.id} item={it} users={users} mystery={mystery}
-                  onClick={() => onOpenDetail(it.id)} />
-              );
-            })}
-          </div>
+          <>
+            {!listVisible && isAdmin && (
+              <div className="px-5 mb-3">
+                <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 border border-dashed border-black px-3 py-2">
+                  Lista jest ukryta dla gości — widzisz ją jako admin
+                </div>
+              </div>
+            )}
+            <div className="px-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {items.map(it => {
+                // Mystery view = hidden visibility, and the viewer isn't admin or owner
+                const isOwner = it.owners?.includes(user.id);
+                // Hidden stacje are a real secret — only the owners see content.
+                // Admins are NOT exempt (unlike the "Organizator i Bau" visibility,
+                // where admins do see content). For everyone else we render a
+                // 🔒 mystery card with no details exposed.
+                const mystery = it.visibility === "hidden" && !isOwner;
+                return (
+                  <StacjaCard key={it.id} item={it} users={users} mystery={mystery}
+                    onClick={() => onOpenDetail(it.id)} />
+                );
+              })}
+            </div>
+          </>
         )}
       <StacjaFormModal open={formOpen} onClose={() => setFormOpen(false)} onSave={save} isAdmin={isAdmin} />
       <StacjeIntroModal open={introOpen} onClose={() => setIntroOpen(false)} initial={intro} onSave={saveIntro} />
@@ -1524,7 +1558,7 @@ const StacjeIntroModal = ({ open, onClose, initial, onSave }) => {
 const visibilityLabel = (v) => ({
   public: "Publiczna",
   hidden: "Ukryta",
-  host: "Dla organizatora",
+  host: "Organizator i Bau",
 }[v] || v);
 
 const StacjaCard = ({ item, users, mystery, onClick }) => {
@@ -1692,7 +1726,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
             {[
               { value: "public", title: "Publiczna", desc: "Widoczna dla wszystkich" },
               { value: "hidden", title: "Ukryta", desc: "Widoczna jako sekret — szczegóły znają tylko organizatorzy stacji" },
-              { value: "host", title: "Widoczne dla organizatora", desc: "Widoczna tylko dla organizatorów stacji oraz dla Baua" },
+              { value: "host", title: "Organizator i Bau", desc: "Widoczna tylko dla organizatorów stacji oraz dla Baua" },
             ].map(opt => {
               const selected = form.visibility === opt.value;
               return (
@@ -1743,7 +1777,9 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
   const isOwner = item.owners?.includes(user.id);
   const isAdmin = user.role === "admin";
   const canEdit = isOwner || isAdmin;
-  const isMystery = item.visibility === "hidden" && !isAdmin && !isOwner;
+  // Hidden stacje are a real secret — only the owners can see content.
+  // Admins not in the owners list see the mystery view too.
+  const isMystery = item.visibility === "hidden" && !isOwner;
 
   // Mystery early return — no details exposed
   if (isMystery) {
@@ -1901,8 +1937,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
   const openEvent = (id) => routerNavigate("/wydarzenia/" + encodeURIComponent(id));
   const sectionRefs = useRef({}); // date string -> DOM element
   const calendarRef = useRef(null);
-  const calendarSentinelRef = useRef(null);
-  const calendarStuck = useStickyDetect(calendarSentinelRef, 80);
+  const [calendarStuck, calendarSentinelRef] = useStickyDetect(80);
   const [selectedDate, setSelectedDate] = useState(null);
 
   const load = async () => {
@@ -2792,8 +2827,7 @@ const FestiwalView = ({ user }) => {
   const [editing, setEditing] = useState(null);
   const [activeSectionId, setActiveSectionId] = useState(null);
   const navRef = useRef(null);
-  const navSentinelRef = useRef(null);
-  const navStuck = useStickyDetect(navSentinelRef, 80);
+  const [navStuck, navSentinelRef] = useStickyDetect(80);
   const userScrollLockRef = useRef(false);
   const isAdmin = user.role === "admin";
 
@@ -3281,16 +3315,141 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
 // ============================================================
 // PROFILE VIEW
 // ============================================================
-const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
-  const [form, setForm] = useState({
-    firstName: user.firstName || "", lastName: user.lastName || "",
-    username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null
-  });
+// Modal: edit name, surname, username. Saves directly to storage on submit
+// and propagates via onUpdate so the parent ProfileView reflects the change
+// without any form-state plumbing.
+const EditProfileModal = ({ open, onClose, user, onUpdate }) => {
+  const [firstName, setFirstName] = useState(user.firstName || "");
+  const [lastName, setLastName] = useState(user.lastName || "");
+  const [username, setUsername] = useState(user.username || "");
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [festivalDates, setFestivalDates] = useState({ startDate: "", endDate: "" });
+  const [error, setError] = useState(null);
 
-  // Load festival date range from miejsce record
+  // Reset fields whenever the modal reopens with a different user record
+  useEffect(() => {
+    if (open) {
+      setFirstName(user.firstName || "");
+      setLastName(user.lastName || "");
+      setUsername(user.username || "");
+      setError(null);
+    }
+  }, [open, user]);
+
+  if (!open) return null;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null); setSaving(true);
+    try {
+      const newUsername = username.trim().toLowerCase();
+      if (!newUsername) { setError("Nazwa użytkownika jest wymagana"); setSaving(false); return; }
+
+      // Spread current user record so attendance / password are preserved
+      const updated = { ...user, firstName: firstName.trim(), lastName: lastName.trim() };
+
+      if (newUsername !== user.username) {
+        const existing = await storage.get("user:" + newUsername);
+        if (existing) { setError("Ta nazwa jest już zajęta"); setSaving(false); return; }
+        await storage.delete("user:" + user.username);
+        updated.username = newUsername;
+        updated.id = newUsername;
+      }
+      await storage.set("user:" + updated.username, updated);
+      onUpdate(updated);
+      setSaving(false);
+      onClose();
+    } catch (err) {
+      console.warn("Profile save failed:", err);
+      setError("Nie udało się zapisać");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edytuj dane">
+      <form onSubmit={submit} className="space-y-4">
+        <Input label="Imię" value={firstName} onChange={e => setFirstName(e.target.value)} />
+        <Input label="Nazwisko" value={lastName} onChange={e => setLastName(e.target.value)} />
+        <Input label="Nazwa użytkownika" value={username} onChange={e => setUsername(e.target.value)} autoCapitalize="none" />
+        {error && (
+          <div className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2">{error}</div>
+        )}
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" className="flex-1" disabled={saving}>{saving ? "..." : "Zapisz"}</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+// Modal: change password. Validates current password against the stored value
+// and writes the new one. Self-contained — no form-level state in the parent.
+const ChangePasswordModal = ({ open, onClose, user, onUpdate }) => {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      setCurrent(""); setNext(""); setConfirm("");
+      setError(null);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!current) { setError("Podaj obecne hasło"); return; }
+    if (current !== user.password) { setError("Nieprawidłowe obecne hasło"); return; }
+    if (!next) { setError("Podaj nowe hasło"); return; }
+    if (next !== confirm) { setError("Nowe hasła nie pasują"); return; }
+    setSaving(true);
+    try {
+      const updated = { ...user, password: next };
+      await storage.set("user:" + user.username, updated);
+      onUpdate(updated);
+      setSaving(false);
+      onClose();
+    } catch (err) {
+      console.warn("Password save failed:", err);
+      setError("Nie udało się zapisać");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Zmień hasło">
+      <form onSubmit={submit} className="space-y-4">
+        <Input label="Obecne hasło" type="password" value={current} onChange={e => setCurrent(e.target.value)} autoComplete="current-password" />
+        <Input label="Nowe hasło" type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" />
+        <Input label="Powtórz nowe hasło" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
+        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+          Hasła nie da się zresetować. Zapamiętaj nowe.
+        </p>
+        {error && (
+          <div className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2">{error}</div>
+        )}
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" className="flex-1" disabled={saving}>{saving ? "..." : "Zmień hasło"}</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
+  const [festivalDates, setFestivalDates] = useState({ startDate: "", endDate: "" });
+  const [editOpen, setEditOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+
+  // Load festival date range from the miejsce record
   useEffect(() => {
     storage.get("miejsce").then(m => {
       if (m && (m.startDate || m.endDate)) {
@@ -3299,61 +3458,72 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
     });
   }, []);
 
-  const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
-
-  const save = async (e) => {
-    e.preventDefault();
-    setMsg(null); setSaving(true);
-
-    // Spread the latest user record so attendance edits made via the
-    // AttendanceCalendar (which writes directly through onUpdate) are preserved.
-    const updated = { ...user };
-    updated.firstName = form.firstName.trim();
-    updated.lastName = form.lastName.trim();
-    updated.profilePicture = form.profilePicture;
-
-    // Username change
-    const newUsername = form.username.trim().toLowerCase();
-    if (newUsername !== user.username) {
-      if (!newUsername) { setMsg({ type: "error", text: "Nazwa użytkownika jest wymagana" }); setSaving(false); return; }
-      const existing = await storage.get("user:" + newUsername);
-      if (existing) { setMsg({ type: "error", text: "Ta nazwa jest już zajęta" }); setSaving(false); return; }
-      await storage.delete("user:" + user.username);
-      updated.username = newUsername;
-      updated.id = newUsername;
+  // Avatar saves immediately on every upload — no global Save button.
+  // Spreads the current user record so attendance + name + password are kept.
+  const onAvatarChange = async (dataUrl) => {
+    setAvatarSaving(true);
+    const updated = { ...user, profilePicture: dataUrl };
+    onUpdate(updated); // optimistic
+    try {
+      await storage.set("user:" + user.username, updated);
+    } catch (err) {
+      console.warn("Avatar save failed:", err);
+      onUpdate(user); // revert
+      window.dispatchEvent(new Event("storage:error"));
+    } finally {
+      setAvatarSaving(false);
     }
-
-    // Password change
-    if (form.newPassword) {
-      if (!form.password) { setMsg({ type: "error", text: "Podaj obecne hasło" }); setSaving(false); return; }
-      if (form.password !== user.password) { setMsg({ type: "error", text: "Nieprawidłowe obecne hasło" }); setSaving(false); return; }
-      updated.password = form.newPassword;
-    }
-
-    await storage.set("user:" + updated.username, updated);
-    onUpdate(updated);
-    setSaving(false);
-    setMsg({ type: "success", text: "Zapisano" });
-    setForm(prev => ({ ...prev, password: "", newPassword: "" }));
   };
+
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "—";
 
   return (
     <div className="pb-20">
       <PageHeader title="Profil" subtitle={"@" + user.username + (user.role === "admin" ? " · admin" : "")} />
-      <form onSubmit={save} className="px-5 space-y-5">
-        <div className="flex flex-col items-center gap-3 py-4">
-          <div className="w-28 h-28 border border-black overflow-hidden bg-white/40">
-            {form.profilePicture
-              ? <img src={form.profilePicture} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center font-display text-4xl font-bold">{(form.firstName || form.username)[0]?.toUpperCase()}</div>}
+      <div className="px-5 space-y-6">
+
+        {/* Avatar — saves immediately on upload */}
+        <div className="flex flex-col items-center gap-3 py-2">
+          <div className="w-28 h-28 border border-black overflow-hidden bg-white/40 relative">
+            {user.profilePicture
+              ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center font-display text-4xl font-bold">{(user.firstName || user.username)[0]?.toUpperCase()}</div>}
+            {avatarSaving && (
+              <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                <div className="spinner" />
+              </div>
+            )}
           </div>
-          <div className="flex gap-2">
-            <ImageUpload value={form.profilePicture} onChange={v => update("profilePicture", v)} label="" maxSize={600} />
+          <ImageUpload value={user.profilePicture} onChange={onAvatarChange} label="" maxSize={600} />
+        </div>
+
+        {/* Read-only personal info with Edit button */}
+        <div className="border border-black">
+          <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-black/20">
+            <div className="min-w-0 flex-1">
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mb-1">Imię i nazwisko</div>
+              <div className="text-base truncate">{fullName}</div>
+            </div>
+            <button type="button" onClick={() => setEditOpen(true)}
+              className="font-display text-xs px-3 py-1.5 border border-black hover:bg-black hover:text-white shrink-0">
+              Edytuj
+            </button>
+          </div>
+          <div className="px-4 py-3">
+            <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mb-1">Nazwa użytkownika</div>
+            <div className="text-base truncate">@{user.username}</div>
           </div>
         </div>
-        <Input label="Imię" value={form.firstName} onChange={e => update("firstName", e.target.value)} />
-        <Input label="Nazwisko" value={form.lastName} onChange={e => update("lastName", e.target.value)} />
-        <Input label="Nazwa użytkownika" value={form.username} onChange={e => update("username", e.target.value)} />
+
+        {/* Password change → modal */}
+        <div>
+          <button type="button" onClick={() => setPwOpen(true)}
+            className="w-full font-display text-sm px-4 py-3 border border-black hover:bg-black hover:text-white transition-colors">
+            Zmień hasło
+          </button>
+        </div>
+
+        {/* Animated background preference (device-local) */}
         <div className="border-t border-black pt-5 space-y-3">
           <div className="font-mono text-xs uppercase tracking-widest opacity-70">Wygląd</div>
           <div className="flex items-center justify-between gap-3 py-1">
@@ -3368,27 +3538,22 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
               {animated ? "Wyłącz" : "Włącz"}
             </button>
           </div>
-          <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Ustawienia są zapisywane na tym urządzeniu.</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+            Ustawienie zapisywane na tym urządzeniu.
+          </p>
         </div>
+
+        {/* Attendance — saves directly through onUpdate (optimistic) */}
         {festivalDates.startDate && festivalDates.endDate && (
           <div className="border-t border-black pt-5 space-y-3">
             <div className="font-mono text-xs uppercase tracking-widest opacity-70">Obecność</div>
             <AttendanceCalendar user={user} startDate={festivalDates.startDate} endDate={festivalDates.endDate} onUpdate={onUpdate} />
           </div>
         )}
-        <div className="border-t border-black pt-5 space-y-4">
-          <div className="font-mono text-xs uppercase tracking-widest opacity-70">Zmień hasło</div>
-          <Input label="Obecne hasło" type="password" value={form.password} onChange={e => update("password", e.target.value)} autoComplete="current-password" />
-          <Input label="Nowe hasło" type="password" value={form.newPassword} onChange={e => update("newPassword", e.target.value)} autoComplete="new-password" />
-          <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Hasła nie da się zresetować. Zapamiętaj nowe.</p>
-        </div>
-        {msg && (
-          <div className={`font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 ${msg.type === "error" ? "bg-white/60" : "bg-black text-white"}`}>
-            {msg.text}
-          </div>
-        )}
-        <Button type="submit" className="w-full" disabled={saving}>{saving ? "..." : "Zapisz"}</Button>
-      </form>
+      </div>
+
+      <EditProfileModal open={editOpen} onClose={() => setEditOpen(false)} user={user} onUpdate={onUpdate} />
+      <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} user={user} onUpdate={onUpdate} />
     </div>
   );
 };
@@ -3427,7 +3592,66 @@ const GoscieView = ({ user, users }) => {
 // ============================================================
 // ADMIN VIEW
 // ============================================================
-const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList }) => {
+// Admin-only editor for home page tile emojis. Each row has the tile's title +
+// description, the current emoji shown big, and an inline emoji input that
+// saves on every keystroke (debounced via uncontrolled blur+enter, but we save
+// on change to feel snappy). Empty input = revert to default.
+const HomeTilesEditor = ({ overrides = {}, onSave }) => {
+  const [savingId, setSavingId] = useState(null);
+  const handleChange = async (id, value) => {
+    // Truncate to 1 grapheme to match emoji-input convention everywhere else
+    const trimmed = truncateGraphemes(value, 1);
+    setSavingId(id);
+    try {
+      await onSave(id, trimmed);
+    } catch {
+      window.dispatchEvent(new Event("storage:error"));
+    } finally {
+      setSavingId(null);
+    }
+  };
+  return (
+    <Card className="p-5">
+      <div className="font-display font-bold uppercase mb-2">Ikony strony głównej</div>
+      <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-4">
+        Emoji wyświetlane na kafelkach na stronie głównej. Puste pole przywraca domyślne.
+      </div>
+      <div className="space-y-3">
+        {HOME_TILES.map(t => {
+          const current = overrides[t.id] || "";
+          return (
+            <div key={t.id} className="flex items-center gap-3">
+              <div className="w-12 h-12 border border-black flex items-center justify-center text-2xl shrink-0 emoji-mono">
+                {current || t.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-display text-sm leading-tight">{t.title}</div>
+                <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">
+                  Domyślnie: {t.icon}
+                </div>
+              </div>
+              <input type="text"
+                defaultValue={current}
+                key={current /* reset input when storage value changes elsewhere */}
+                onBlur={e => {
+                  const v = truncateGraphemes(e.target.value, 1);
+                  if (v !== current) handleChange(t.id, v);
+                }}
+                onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+                placeholder={t.icon}
+                maxLength={8}
+                className="w-16 h-12 border border-black px-2 text-center text-xl bg-white"
+                disabled={savingId === t.id}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+};
+
+const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, homeTilesOverrides = {}, onSaveHomeTileIcon }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -3489,6 +3713,20 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
             </Button>
           </div>
         </Card>
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-display font-bold uppercase mb-1">Lista stacji kosmicznych</div>
+              <div className="font-mono text-xs uppercase tracking-widest opacity-70">
+                {stacjeListVisible ? "Widoczna dla wszystkich" : "Ukryta — widoczny tylko opis"}
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={onToggleStacjeList}>
+              {stacjeListVisible ? "Ukryj" : "Pokaż"}
+            </Button>
+          </div>
+        </Card>
+        <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-bold uppercase">Użytkownicy ({users.length})</h2>
@@ -3569,6 +3807,13 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [guestListVisible, setGuestListVisible] = useState(false);
+  // Whether non-admins see the stacja list. Default true (status quo for existing
+  // installations); admin can hide it from the admin page.
+  const [stacjeListVisible, setStacjeListVisible] = useState(true);
+  // Per-tile emoji overrides for the home page. Keyed by tile id (e.g.
+  // "wydarzenia"), value is the emoji string. Missing keys fall back to the
+  // default in HOME_TILES. Persisted at storage key `home_tiles`.
+  const [homeTilesOverrides, setHomeTilesOverrides] = useState({});
   const [stacjeRefreshKey, setStacjeRefreshKey] = useState(0);
 
   // Router integration
@@ -3624,8 +3869,13 @@ export default function App() {
         // Just load settings in parallel with whatever happens next.
         const seededFlag = await storage.get("seeded:v1");
         if (seededFlag) {
-          const settings = await storage.get("settings");
+          const [settings, homeTiles] = await Promise.all([
+            storage.get("settings"),
+            storage.get("home_tiles"),
+          ]);
           setGuestListVisible(!!settings?.guestListVisible);
+          setStacjeListVisible(settings?.stacjeListVisible !== false);
+          setHomeTilesOverrides(homeTiles || {});
           setInitialized(true);
           return;
         }
@@ -3645,9 +3895,10 @@ export default function App() {
           }));
         }
         if (!settings) {
-          writes.push(storage.set("settings", { guestListVisible: false }));
+          writes.push(storage.set("settings", { guestListVisible: false, stacjeListVisible: true }));
         } else {
           setGuestListVisible(!!settings.guestListVisible);
+          setStacjeListVisible(settings.stacjeListVisible !== false);
         }
         if (miejsce && (typeof miejsce.lat !== "number" || typeof miejsce.lng !== "number")) {
           writes.push(storage.set("miejsce", { ...miejsce, lat: 51.8667, lng: 20.8667 }));
@@ -3683,8 +3934,15 @@ export default function App() {
           const u = await storage.get("user:" + savedUsername);
           if (!cancelled && u) {
             setUser(u);
-            const s = await storage.get("settings");
-            if (!cancelled) setGuestListVisible(!!s?.guestListVisible);
+            const [s, homeTiles] = await Promise.all([
+              storage.get("settings"),
+              storage.get("home_tiles"),
+            ]);
+            if (!cancelled) {
+              setGuestListVisible(!!s?.guestListVisible);
+              setStacjeListVisible(s?.stacjeListVisible !== false);
+              setHomeTilesOverrides(homeTiles || {});
+            }
             // Warm the cache for the rest of the app
             storage.prefetchAll("user:");
             storage.prefetchAll("wydarzenie:");
@@ -3708,8 +3966,13 @@ export default function App() {
     setUser(u);
     routerNavigate("/");
     try { localStorage.setItem("campbau:session", u.username); } catch {}
-    const s = await storage.get("settings");
+    const [s, homeTiles] = await Promise.all([
+      storage.get("settings"),
+      storage.get("home_tiles"),
+    ]);
     setGuestListVisible(!!s?.guestListVisible);
+    setStacjeListVisible(s?.stacjeListVisible !== false);
+    setHomeTilesOverrides(homeTiles || {});
     // Warm the cache so navigation feels instant
     storage.prefetchAll("user:");
     storage.prefetchAll("wydarzenie:");
@@ -3733,8 +3996,32 @@ export default function App() {
 
   const onToggleGuestList = async () => {
     const next = !guestListVisible;
-    await storage.set("settings", { guestListVisible: next });
+    const current = (await storage.get("settings")) || {};
+    await storage.set("settings", { ...current, guestListVisible: next });
     setGuestListVisible(next);
+  };
+
+  const onToggleStacjeList = async () => {
+    const next = !stacjeListVisible;
+    const current = (await storage.get("settings")) || {};
+    await storage.set("settings", { ...current, stacjeListVisible: next });
+    setStacjeListVisible(next);
+  };
+
+  // Save a single home-tile emoji override. Empty string clears the override
+  // (tile falls back to its hardcoded default in HOME_TILES).
+  const onSaveHomeTileIcon = async (id, emoji) => {
+    const next = { ...homeTilesOverrides };
+    if (emoji && emoji.trim()) next[id] = emoji.trim();
+    else delete next[id];
+    setHomeTilesOverrides(next);  // optimistic
+    try {
+      await storage.set("home_tiles", next);
+    } catch (err) {
+      // Roll back on error
+      setHomeTilesOverrides(homeTilesOverrides);
+      throw err;
+    }
   };
 
   const navigate = (v) => {
@@ -3817,14 +4104,14 @@ export default function App() {
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={
-              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} />
+              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides} />
             } />
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />
             } />
             <Route path="/wydarzenia/:id" element={<WydarzenieDetailRoute />} />
             <Route path="/stacje" element={
-              <StacjeView key={stacjeRefreshKey} user={user} users={users} onOpenDetail={openStacjaDetail} />
+              <StacjeView key={stacjeRefreshKey} user={user} users={users} onOpenDetail={openStacjaDetail} listVisible={stacjeListVisible} />
             } />
             <Route path="/stacje/:id" element={<StacjaDetailRoute />} />
             <Route path="/festiwal" element={<FestiwalView user={user} />} />
@@ -3841,7 +4128,9 @@ export default function App() {
             <Route path="/admin" element={
               user.role === "admin"
                 ? <AdminView user={user} users={users} onReloadUsers={loadUsers}
-                    guestListVisible={guestListVisible} onToggleGuestList={onToggleGuestList} />
+                    guestListVisible={guestListVisible} onToggleGuestList={onToggleGuestList}
+                    stacjeListVisible={stacjeListVisible} onToggleStacjeList={onToggleStacjeList}
+                    homeTilesOverrides={homeTilesOverrides} onSaveHomeTileIcon={onSaveHomeTileIcon} />
                 : <EmptyState message="Brak dostępu" />
             } />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -44,54 +44,49 @@ const GlobalStyles = () => (
       z-index: -1;
       overflow: hidden;
       pointer-events: none;
-      filter: saturate(1.1);
+      /* No filter on the parent: the saturate() forced the whole element through
+         an extra compositing pass every frame, which dominates frame time on
+         lower-end devices. The blob colors are saturated enough on their own. */
     }
     .blob {
       position: absolute;
       border-radius: 50%;
-      filter: blur(90px);
+      filter: blur(70px);
       opacity: 0.85;
-      will-change: transform;
+      /* translate3d in keyframes promotes blobs to their own compositor layers
+         so the animation runs on the GPU rather than recomposing every frame. */
     }
-    /* Mobile: heavier blur is washed-out by mobile GPUs, and tall portrait viewports
-       leave the corners sparse. Tighten blur and scale up coverage. */
+    /* Mobile: smaller blur is enough since viewport is smaller, and mobile GPUs
+       are sensitive to large blur radii. */
     @media (max-width: 768px) {
-      .blob { filter: blur(50px); opacity: 1; }
+      .blob { filter: blur(40px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 14s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 17s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 13s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 15s ease-in-out infinite alternate; }
-    .blob-5 { width: 48vmax; height: 48vmax; background: #ffd0dc; top: 30vmax; left: 25vmax; animation: floatE 12s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 18s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 22s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 16s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 20s ease-in-out infinite alternate; }
+    /* blob-5 removed: 5 large blurred elements was too many overlapping layers
+       to composite smoothly. Four corner blobs cover the viewport just fine. */
 
     @keyframes floatA {
-      0% { transform: translate(0,0) scale(1); }
-      50% { transform: translate(25vmax, 20vmax) scale(1.15); }
-      100% { transform: translate(10vmax, 45vmax) scale(0.9); }
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(10vmax, 30vmax, 0) scale(1.1); }
     }
     @keyframes floatB {
-      0% { transform: translate(0,0) scale(1); }
-      50% { transform: translate(-30vmax, 25vmax) scale(1.2); }
-      100% { transform: translate(-5vmax, 50vmax) scale(0.85); }
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(-15vmax, 25vmax, 0) scale(0.92); }
     }
     @keyframes floatC {
-      0% { transform: translate(0,0) scale(1); }
-      50% { transform: translate(25vmax, -20vmax) scale(1.15); }
-      100% { transform: translate(-10vmax, -40vmax) scale(0.95); }
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(15vmax, -25vmax, 0) scale(1.05); }
     }
     @keyframes floatD {
-      0% { transform: translate(0,0) scale(1); }
-      50% { transform: translate(-25vmax, -25vmax) scale(1.1); }
-      100% { transform: translate(10vmax, -10vmax) scale(1.3); }
+      0%   { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(-10vmax, -10vmax, 0) scale(1.1); }
     }
-    @keyframes floatE {
-      0% { transform: translate(0,0) scale(1); }
-      50% { transform: translate(-30vmax, -15vmax) scale(1.25); }
-      100% { transform: translate(20vmax, 25vmax) scale(0.8); }
-    }
-    body.dark .blob { opacity: 0.18; filter: blur(140px); }
+    body.dark .blob { opacity: 0.18; filter: blur(110px); }
     @media (max-width: 768px) {
-      body.dark .blob { filter: blur(80px); opacity: 0.25; }
+      body.dark .blob { filter: blur(60px); opacity: 0.25; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -247,7 +242,6 @@ const AnimatedBackground = ({ animated = true }) => (
     <div className="blob blob-2" />
     <div className="blob blob-3" />
     <div className="blob blob-4" />
-    <div className="blob blob-5" />
   </div>
 );
 
@@ -1293,7 +1287,9 @@ const CountdownWidget = ({ startDate, endDate }) => {
 };
 
 // ============================================================
-// ATTENDANCE PROMPT — shows on home if user hasn't marked all festival days
+// ATTENDANCE PROMPT — shows on home if user hasn't marked all festival days.
+// Returns null when every day is marked (caller should render the full
+// AttendanceCalendar instead).
 // ============================================================
 const AttendancePrompt = ({ user, startDate, endDate, onNavigate }) => {
   if (!startDate || !endDate) return null;
@@ -1333,7 +1329,25 @@ const AttendancePrompt = ({ user, startDate, endDate, onNavigate }) => {
   );
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate }) => {
+// Returns true if the user has marked every festival day (with any of yes/maybe/no).
+const isAttendanceComplete = (user, startDate, endDate) => {
+  if (!startDate || !endDate) return false;
+  const start = new Date(startDate + "T12:00");
+  const end = new Date(endDate + "T12:00");
+  if (start > end) return false;
+  const attendance = user.attendance || {};
+  const cur = new Date(start);
+  let safety = 0;
+  while (cur <= end && safety < 100) {
+    const day = cur.toISOString().slice(0, 10);
+    if (!attendance[day]) return false;
+    cur.setDate(cur.getDate() + 1);
+    safety++;
+  }
+  return true;
+};
+
+const HomeView = ({ user, guestListVisible, onNavigate, onUpdate }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
     if (t.conditional === "guests") return user.role === "admin" || guestListVisible;
@@ -1354,6 +1368,7 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
   const locationName = miejsce?.mapQuery || "Grójec, Polska";
   const startDate = miejsce?.startDate || "";
   const endDate = miejsce?.endDate || "";
+  const allMarked = miejsceLoaded && isAttendanceComplete(user, startDate, endDate);
 
   return (
     <div className="pb-20">
@@ -1362,8 +1377,17 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
         {miejsceLoaded && startDate && (
           <CountdownWidget startDate={startDate} endDate={endDate} />
         )}
-        {miejsceLoaded && (
-          <AttendancePrompt user={user} startDate={startDate} endDate={endDate} onNavigate={onNavigate} />
+        {/* If the user has marked every festival day, show the full calendar
+            widget so they can see and edit at a glance. Otherwise nudge them
+            to fill it in via the prompt below. */}
+        {miejsceLoaded && startDate && endDate && (
+          allMarked ? (
+            <div className="mb-6">
+              <AttendanceCalendar user={user} startDate={startDate} endDate={endDate} onUpdate={onUpdate} />
+            </div>
+          ) : (
+            <AttendancePrompt user={user} startDate={startDate} endDate={endDate} onNavigate={onNavigate} />
+          )
         )}
         {miejsceLoaded && (
           <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
@@ -2826,7 +2850,6 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
 // ============================================================
 const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
   const [openDay, setOpenDay] = useState(null);
-  const [saving, setSaving] = useState(false);
 
   // Generate festival days
   const days = (() => {
@@ -2848,17 +2871,19 @@ const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
   if (days.length === 0) return null;
 
   const attendance = user.attendance || {};
-  const setAttendance = async (day, value) => {
-    if (saving) return;
-    setSaving(true);
+  const setAttendance = (day, value) => {
     const next = { ...attendance };
     if (next[day] === value) delete next[day];
     else next[day] = value;
     const updated = { ...user, attendance: next };
-    const ok = await storage.set("user:" + user.username, updated);
-    if (ok) onUpdate?.(updated);
-    setSaving(false);
+    // Optimistic: update local state immediately so the UI feels instant.
+    onUpdate?.(updated);
     setOpenDay(null);
+    // Persist in the background. On failure, revert and show a console warning.
+    storage.set("user:" + user.username, updated).catch(err => {
+      console.warn("Failed to save attendance:", err);
+      onUpdate?.(user);
+    });
   };
 
   const fmtWeekday = (s) => new Date(s + "T12:00").toLocaleDateString("pl-PL", { weekday: "short" }).replace(".", "");
@@ -2908,7 +2933,6 @@ const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
                       return (
                         <button key={opt.value}
                           onClick={() => setAttendance(day, opt.value)}
-                          disabled={saving}
                           className={`font-display text-[10px] py-1.5 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                           {opt.label}
                         </button>
@@ -3759,7 +3783,7 @@ export default function App() {
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={
-              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} />
+              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} />
             } />
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />

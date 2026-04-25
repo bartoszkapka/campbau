@@ -208,8 +208,8 @@ const GlobalStyles = () => (
     .prose-simple em { font-style: italic; }
 
     /* O Festiwalu — generous line spacing for readability */
-    .festiwal-prose { line-height: 1.7; }
-    .festiwal-prose p { margin: 0 0 1.25em 0; }
+    .festiwal-prose { line-height: 1.95; }
+    .festiwal-prose p { margin: 0 0 1.4em 0; }
 
     .spinner {
       width: 24px; height: 24px;
@@ -270,6 +270,27 @@ const Logo = ({ className = "", style = {} }) => (
 // UTILS
 // ============================================================
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+// Truncate a string to the first N user-perceived characters (graphemes).
+// Uses Intl.Segmenter where available (modern browsers) to handle emoji with
+// ZWJ joiners and skin tone modifiers correctly. Falls back to naive char
+// truncation otherwise.
+const truncateGraphemes = (str, max = 2) => {
+  if (!str) return "";
+  try {
+    if (typeof Intl !== "undefined" && Intl.Segmenter) {
+      const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+      const out = [];
+      for (const { segment } of seg.segment(str)) {
+        out.push(segment);
+        if (out.length >= max) break;
+      }
+      return out.join("");
+    }
+  } catch {}
+  // Fallback: split by code points, but cap at max code points
+  return Array.from(str).slice(0, max * 2).join("");
+};
 
 const resizeImage = (file, maxSize = 1000) => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -610,10 +631,10 @@ const LoginView = ({ onLogin, initError }) => {
   const submit = (e) => { e.preventDefault(); doLogin(); };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 relative">
+    <div className="min-h-screen flex items-start justify-center px-6 pt-20 pb-10 relative">
       <div className="w-full max-w-sm fade-in">
-        <div className="flex justify-center mb-10">
-          <Logo style={{ width: "200px", height: "auto" }} />
+        <div className="flex justify-center mb-8">
+          <Logo style={{ width: "160px", height: "auto" }} />
         </div>
         <form onSubmit={submit} className="space-y-4">
           <Input label="Nazwa użytkownika" value={username}
@@ -1177,6 +1198,130 @@ const PwaInstallBanner = () => {
   );
 };
 
+// ============================================================
+// COUNTDOWN WIDGET — counts down to the festival's start date
+// ============================================================
+const CountdownWidget = ({ startDate, endDate }) => {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60 * 1000); // minute is enough
+    return () => clearInterval(id);
+  }, []);
+
+  if (!startDate) return null;
+
+  const target = new Date(startDate + "T00:00:00");
+  const end = endDate ? new Date(endDate + "T23:59:59") : target;
+  const diffMs = target.getTime() - now.getTime();
+  const inProgress = now >= target && now <= end;
+  const past = now > end;
+
+  // Format range header
+  const fmtDate = (s) => new Date(s + "T12:00").toLocaleDateString("pl-PL", { day: "numeric", month: "long" });
+  const rangeText = endDate && endDate !== startDate
+    ? `${fmtDate(startDate)} – ${fmtDate(endDate)}`
+    : fmtDate(startDate);
+
+  if (past) {
+    return (
+      <div className="border border-black p-5 mb-6">
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">Camp Bau</div>
+        <div className="font-display text-2xl">Do zobaczenia w przyszłym roku!</div>
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-2">{rangeText}</div>
+      </div>
+    );
+  }
+
+  if (inProgress) {
+    return (
+      <div className="border border-black p-5 mb-6 bg-black text-white">
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-80 mb-2">Camp Bau · {rangeText}</div>
+        <div className="font-display text-3xl">Festiwal trwa! 🌌</div>
+      </div>
+    );
+  }
+
+  // Counting down
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  // Polish plurals
+  const lbl = (n, one, few, many) => {
+    if (n === 1) return one;
+    const last = n % 10;
+    const lastTwo = n % 100;
+    if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return few;
+    return many;
+  };
+
+  return (
+    <div className="border border-black p-5 mb-6">
+      <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">Do festiwalu</div>
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{rangeText}</div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-center border border-black py-3">
+          <div className="font-display text-3xl leading-none">{days}</div>
+          <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 mt-1">{lbl(days, "dzień", "dni", "dni")}</div>
+        </div>
+        <div className="text-center border border-black py-3">
+          <div className="font-display text-3xl leading-none">{hours}</div>
+          <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 mt-1">{lbl(hours, "godz.", "godz.", "godz.")}</div>
+        </div>
+        <div className="text-center border border-black py-3">
+          <div className="font-display text-3xl leading-none">{minutes}</div>
+          <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 mt-1">{lbl(minutes, "min.", "min.", "min.")}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// ATTENDANCE PROMPT — shows on home if user hasn't marked all festival days
+// ============================================================
+const AttendancePrompt = ({ user, startDate, endDate, onNavigate }) => {
+  if (!startDate || !endDate) return null;
+
+  // Generate days in range
+  const days = [];
+  const start = new Date(startDate + "T12:00");
+  const end = new Date(endDate + "T12:00");
+  if (start > end) return null;
+  const cur = new Date(start);
+  let safety = 0;
+  while (cur <= end && safety < 100) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+    safety++;
+  }
+
+  const attendance = user.attendance || {};
+  const unmarked = days.filter(d => !attendance[d]);
+  if (unmarked.length === 0) return null;
+
+  return (
+    <div className="border border-black p-5 mb-6">
+      <div className="flex items-start gap-3">
+        <div className="text-2xl emoji-mono shrink-0">📅</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-base mb-1">Zaznacz swoją obecność</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-3">
+            {unmarked.length === days.length
+              ? "Daj znać, w które dni planujesz przyjechać"
+              : `Pozostało do zaznaczenia: ${unmarked.length} ${unmarked.length === 1 ? "dzień" : "dni"}`}
+          </div>
+          <Button size="sm" onClick={() => onNavigate("profile")}>Przejdź do profilu</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const HomeView = ({ user, guestListVisible, onNavigate }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
@@ -1196,11 +1341,19 @@ const HomeView = ({ user, guestListVisible, onNavigate }) => {
   const lat = (miejsce && typeof miejsce.lat === "number") ? miejsce.lat : 51.8667;
   const lng = (miejsce && typeof miejsce.lng === "number") ? miejsce.lng : 20.8667;
   const locationName = miejsce?.mapQuery || "Grójec, Polska";
+  const startDate = miejsce?.startDate || "";
+  const endDate = miejsce?.endDate || "";
 
   return (
     <div className="pb-20">
       <div className="px-5 pt-8">
         <PwaInstallBanner />
+        {miejsceLoaded && startDate && (
+          <CountdownWidget startDate={startDate} endDate={endDate} />
+        )}
+        {miejsceLoaded && (
+          <AttendancePrompt user={user} startDate={startDate} endDate={endDate} onNavigate={onNavigate} />
+        )}
         {miejsceLoaded && (
           <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
         )}
@@ -1400,7 +1553,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing }) => {
               {form.icon || "·"}
             </div>
             <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
-              onChange={e => update("icon", e.target.value)} maxLength={4} />
+              onChange={e => update("icon", truncateGraphemes(e.target.value, 2))} maxLength={8} />
           </div>
         </div>
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
@@ -1604,7 +1757,10 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
       storage.getAll("stacja:")
     ]);
     const publicStacje = sts.filter(s => s.visibility === "public" && s.date);
-    setEvents(evs);
+    // Hide admin-only events from non-admins. Default visibility is public
+    // (so events created before this feature are visible).
+    const visibleEvents = isAdmin ? evs : evs.filter(e => (e.visibility || "public") === "public");
+    setEvents(visibleEvents);
     setStacje(publicStacje);
     setLoading(false);
   };
@@ -1696,17 +1852,13 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
             <div className="flex gap-2" style={{ width: "max-content" }}>
               {dateKeys.map(dateStr => {
                 const isSelected = dateStr === selectedDate;
-                const count = groupsByDate[dateStr].length;
                 return (
                   <button key={dateStr} data-date={dateStr}
                     onClick={() => scrollToDay(dateStr)}
-                    className={`shrink-0 border border-black px-3 py-2.5 w-20 text-center transition-colors ${isSelected ? "bg-black text-white" : "hover:bg-black/5"}`}>
-                    <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{fmtWeekday(dateStr)}</div>
-                    <div className="font-display text-2xl leading-none my-1">{fmtDay(dateStr)}</div>
-                    <div className="font-mono text-[9px] uppercase tracking-widest opacity-70">{fmtMonth(dateStr)}</div>
-                    <div className={`font-mono text-[9px] uppercase tracking-widest mt-1 ${isSelected ? "opacity-90" : "opacity-50"}`}>
-                      {count} {count === 1 ? "wyd." : "wyd."}
-                    </div>
+                    className={`shrink-0 border border-black px-2 py-2 w-14 text-center transition-colors ${isSelected ? "bg-black text-white" : "hover:bg-black/5"}`}>
+                    <div className="font-mono text-[8px] uppercase tracking-widest opacity-70">{fmtWeekday(dateStr)}</div>
+                    <div className="font-display text-lg leading-none my-1">{fmtDay(dateStr)}</div>
+                    <div className="font-mono text-[8px] uppercase tracking-widest opacity-70">{fmtMonth(dateStr)}</div>
                   </button>
                 );
               })}
@@ -1738,6 +1890,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
+                            {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
                             {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
                             {it.time && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{it.time.slice(0, 5)}</span>}
                           </div>
@@ -1801,7 +1954,8 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
 const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
   const [form, setForm] = useState({
     title: "", description: "", image: null, date: "", time: "",
-    kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false
+    kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false,
+    visibility: "public"
   });
   useEffect(() => {
     if (open) setForm(editing ? {
@@ -1809,10 +1963,12 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
       image: editing.image || null, date: editing.date || "", time: editing.time || "",
       kosmobusEnabled: !!editing.kosmobusEnabled,
       guestListEnabled: !!editing.guestListEnabled,
-      transportNeeded: !!editing.transportNeeded
+      transportNeeded: !!editing.transportNeeded,
+      visibility: editing.visibility || "public"
     } : {
       title: "", description: "", image: null, date: "", time: "",
-      kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false
+      kosmobusEnabled: false, guestListEnabled: false, transportNeeded: false,
+      visibility: "public"
     });
   }, [open, editing]);
   const update = (k, v) => setForm(prev => {
@@ -1829,7 +1985,8 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
       image: form.image, date: form.date || null, time: form.time || null,
       kosmobusEnabled: form.kosmobusEnabled,
       guestListEnabled: form.guestListEnabled,
-      transportNeeded: form.transportNeeded
+      transportNeeded: form.transportNeeded,
+      visibility: form.visibility
     });
   };
 
@@ -1857,6 +2014,25 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Data" type="date" value={form.date} onChange={e => update("date", e.target.value)} />
           <Input label="Godzina" type="time" value={form.time} onChange={e => update("time", e.target.value)} disabled={!form.date} />
+        </div>
+        {/* Visibility */}
+        <div>
+          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Widoczność</span>
+          <div className="space-y-2">
+            {[
+              { value: "public", title: "Publiczne", desc: "Widoczne dla wszystkich" },
+              { value: "admin", title: "Tylko admin", desc: "Widoczne tylko dla adminów" },
+            ].map(opt => {
+              const selected = form.visibility === opt.value;
+              return (
+                <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
+                  className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                  <div className="font-display text-sm">{opt.title}</div>
+                  <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
         {/* Feature toggles */}
         <div className="border-t border-black pt-4 space-y-2">
@@ -1917,6 +2093,16 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
   );
 
   const isAdmin = user.role === "admin";
+
+  // Visibility check — admin-only events hidden from regular users
+  if ((item.visibility || "public") === "admin" && !isAdmin) {
+    return (
+      <div className="p-5">
+        <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
+        <EmptyState message="Brak dostępu" />
+      </div>
+    );
+  }
 
   // Generic save — applies a partial update to the event record
   const persist = async (updater) => {
@@ -2073,6 +2259,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
+          {item.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
           {item.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">👥</span> Lista gości</span>}
           {item.transportNeeded && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">🚗</span> Transport</span>}
           {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
@@ -2130,7 +2317,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
         <div className="mx-5 mb-6 space-y-4">
           <div className="flex items-center gap-2">
             <span className="text-2xl emoji-mono">🚗</span>
-            <h2 className="font-display text-xl">Potrzebny transport</h2>
+            <h2 className="font-display text-xl">Transport</h2>
           </div>
 
           {/* Kosmobus widget */}
@@ -2374,7 +2561,7 @@ const TransportFormModal = ({ open, onClose, onSave }) => {
               {form.emoji || "·"}
             </div>
             <Input className="flex-1" placeholder="Wpisz emoji" value={form.emoji}
-              onChange={e => update("emoji", e.target.value)} maxLength={4} />
+              onChange={e => update("emoji", truncateGraphemes(e.target.value, 2))} maxLength={8} />
           </div>
         </div>
         <Input label="Nazwa" value={form.name} onChange={e => update("name", e.target.value)}
@@ -2512,7 +2699,7 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
               {form.icon || "·"}
             </div>
             <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
-              onChange={e => update("icon", e.target.value)} maxLength={4} />
+              onChange={e => update("icon", truncateGraphemes(e.target.value, 2))} maxLength={8} />
           </div>
         </div>
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />

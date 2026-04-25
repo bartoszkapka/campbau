@@ -3157,8 +3157,7 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
 const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onToggleTheme }) => {
   const [form, setForm] = useState({
     firstName: user.firstName || "", lastName: user.lastName || "",
-    username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null,
-    attendance: user.attendance || {}
+    username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null
   });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -3173,51 +3172,18 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onTogg
     });
   }, []);
 
-  // Generate list of dates from startDate to endDate (inclusive)
-  const festivalDays = (() => {
-    const { startDate, endDate } = festivalDates;
-    if (!startDate || !endDate) return [];
-    const days = [];
-    const start = new Date(startDate + "T12:00");
-    const end = new Date(endDate + "T12:00");
-    if (start > end) return [];
-    const cur = new Date(start);
-    let safety = 0;
-    while (cur <= end && safety < 100) {
-      days.push(cur.toISOString().slice(0, 10));
-      cur.setDate(cur.getDate() + 1);
-      safety++;
-    }
-    return days;
-  })();
-
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
-  const setAttendance = (date, value) => {
-    setForm(prev => {
-      const next = { ...(prev.attendance || {}) };
-      // Clicking the already-selected option clears it
-      if (next[date] === value) delete next[date];
-      else next[date] = value;
-      return { ...prev, attendance: next };
-    });
-  };
-
-  const fmtDayLabel = (dStr) => {
-    const d = new Date(dStr + "T12:00");
-    const weekday = d.toLocaleDateString("pl-PL", { weekday: "long" });
-    const date = d.toLocaleDateString("pl-PL", { day: "numeric", month: "long" });
-    return { weekday, date };
-  };
 
   const save = async (e) => {
     e.preventDefault();
     setMsg(null); setSaving(true);
 
+    // Spread the latest user record so attendance edits made via the
+    // AttendanceCalendar (which writes directly through onUpdate) are preserved.
     const updated = { ...user };
     updated.firstName = form.firstName.trim();
     updated.lastName = form.lastName.trim();
     updated.profilePicture = form.profilePicture;
-    updated.attendance = form.attendance || {};
 
     // Username change
     const newUsername = form.username.trim().toLowerCase();
@@ -3289,41 +3255,10 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onTogg
           </div>
           <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Ustawienia są zapisywane na tym urządzeniu.</p>
         </div>
-        {festivalDays.length > 0 && (
+        {festivalDates.startDate && festivalDates.endDate && (
           <div className="border-t border-black pt-5 space-y-3">
             <div className="font-mono text-xs uppercase tracking-widest opacity-70">Obecność</div>
-            <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Zaznacz, w które dni będziesz na festiwalu.</p>
-            <div className="space-y-2">
-              {festivalDays.map(day => {
-                const status = form.attendance?.[day];
-                const { weekday, date } = fmtDayLabel(day);
-                const opts = [
-                  { value: "yes", label: "✓ Tak" },
-                  { value: "maybe", label: "? Może" },
-                  { value: "no", label: "✗ Nie" },
-                ];
-                return (
-                  <div key={day} className="border border-black p-3">
-                    <div className="flex items-baseline justify-between gap-2 mb-2">
-                      <div className="font-display text-sm capitalize">{weekday}</div>
-                      <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{date}</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {opts.map(o => {
-                        const selected = status === o.value;
-                        return (
-                          <button key={o.value} type="button"
-                            onClick={() => setAttendance(day, o.value)}
-                            className={`font-display text-xs py-2 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-                            {o.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <AttendanceCalendar user={user} startDate={festivalDates.startDate} endDate={festivalDates.endDate} onUpdate={onUpdate} />
           </div>
         )}
         <div className="border-t border-black pt-5 space-y-4">

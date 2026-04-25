@@ -6,8 +6,6 @@ import { storage } from "./storage.js";
 // ============================================================
 const GlobalStyles = () => (
   <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800;900&display=swap');
-
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body, #root { margin: 0; padding: 0; min-height: 100%; }
     body {
@@ -96,6 +94,7 @@ const GlobalStyles = () => (
     @media (prefers-reduced-motion: reduce) {
       .blob { animation: none !important; }
     }
+    .bg-stage-static .blob { animation: none !important; }
 
     /* ==========================================================
        DARK MODE OVERRIDES — gradient UI over black
@@ -172,8 +171,8 @@ const GlobalStyles = () => (
 );
 
 // Animated background wrapper — 5 floating blurred blobs
-const AnimatedBackground = () => (
-  <div className="bg-stage" aria-hidden>
+const AnimatedBackground = ({ animated = true }) => (
+  <div className={`bg-stage ${animated ? "" : "bg-stage-static"}`} aria-hidden>
     <div className="blob blob-1" />
     <div className="blob blob-2" />
     <div className="blob blob-3" />
@@ -1832,7 +1831,7 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
 // ============================================================
 // PROFILE VIEW
 // ============================================================
-const ProfileView = ({ user, onUpdate }) => {
+const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, theme, onToggleTheme }) => {
   const [form, setForm] = useState({
     firstName: user.firstName || "", lastName: user.lastName || "",
     username: user.username, password: "", newPassword: "", profilePicture: user.profilePicture || null
@@ -1893,6 +1892,34 @@ const ProfileView = ({ user, onUpdate }) => {
         <Input label="Imię" value={form.firstName} onChange={e => update("firstName", e.target.value)} />
         <Input label="Nazwisko" value={form.lastName} onChange={e => update("lastName", e.target.value)} />
         <Input label="Nazwa użytkownika" value={form.username} onChange={e => update("username", e.target.value)} />
+        <div className="border-t border-black pt-5 space-y-3">
+          <div className="font-mono text-xs uppercase tracking-widest opacity-70">Wygląd</div>
+          <div className="flex items-center justify-between gap-3 py-1">
+            <div className="min-w-0">
+              <div className="text-sm">Tryb ciemny</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-0.5">
+                {theme === "dark" ? "Włączony" : "Wyłączony"}
+              </div>
+            </div>
+            <button type="button" onClick={onToggleTheme}
+              className="font-display text-xs px-4 py-2 border border-black hover:bg-black hover:text-white shrink-0">
+              {theme === "dark" ? "☀ Jasny" : "☾ Ciemny"}
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-3 py-1">
+            <div className="min-w-0">
+              <div className="text-sm">Animowane tło</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-0.5">
+                {animated ? "Włączone" : "Wyłączone"}
+              </div>
+            </div>
+            <button type="button" onClick={onToggleAnimated}
+              className="font-display text-xs px-4 py-2 border border-black hover:bg-black hover:text-white shrink-0">
+              {animated ? "Wyłącz" : "Włącz"}
+            </button>
+          </div>
+          <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Ustawienia są zapisywane na tym urządzeniu.</p>
+        </div>
         <div className="border-t border-black pt-5 space-y-4">
           <div className="font-mono text-xs uppercase tracking-widest opacity-70">Zmień hasło</div>
           <Input label="Obecne hasło" type="password" value={form.password} onChange={e => update("password", e.target.value)} autoComplete="current-password" />
@@ -2097,6 +2124,14 @@ export default function App() {
     return "light";
   });
 
+  const [animated, setAnimated] = useState(() => {
+    try {
+      const saved = localStorage.getItem("campbau:animated");
+      if (saved === "false") return false;
+    } catch {}
+    return true;
+  });
+
   // Toggle .dark class on body whenever theme changes
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
@@ -2104,35 +2139,54 @@ export default function App() {
     return () => { document.body.classList.remove("dark"); };
   }, [theme]);
 
+  // Persist animated preference
+  useEffect(() => {
+    try { localStorage.setItem("campbau:animated", animated ? "true" : "false"); } catch {}
+  }, [animated]);
+
   const toggleTheme = () => setTheme(t => t === "dark" ? "light" : "dark");
+  const toggleAnimated = () => setAnimated(a => !a);
 
   // Initialize default admin, settings, demo data
   useEffect(() => {
     (async () => {
       try {
-        let existing = null;
-        try { existing = await storage.get("user:bau"); } catch (e) { console.warn("get bau failed", e); }
+        // Fast path — if already initialized once, skip the whole bootstrap.
+        // Just load settings in parallel with whatever happens next.
+        const seededFlag = await storage.get("seeded:v1");
+        if (seededFlag) {
+          const settings = await storage.get("settings");
+          setGuestListVisible(!!settings?.guestListVisible);
+          setInitialized(true);
+          return;
+        }
+
+        // First-run bootstrap. Run independent ops in parallel.
+        const [existing, settings, miejsce] = await Promise.all([
+          storage.get("user:bau"),
+          storage.get("settings"),
+          storage.get("miejsce"),
+        ]);
+
+        const writes = [];
         if (!existing) {
-          const ok = await storage.set("user:bau", {
+          writes.push(storage.set("user:bau", {
             id: "bau", username: "bau", password: "kambau",
             firstName: "", lastName: "", profilePicture: null, role: "admin"
-          });
-          if (!ok) console.warn("Failed to persist admin user on init");
+          }));
         }
-        const settings = await storage.get("settings");
         if (!settings) {
-          await storage.set("settings", { guestListVisible: false });
+          writes.push(storage.set("settings", { guestListVisible: false }));
         } else {
           setGuestListVisible(!!settings.guestListVisible);
         }
+        if (miejsce && (typeof miejsce.lat !== "number" || typeof miejsce.lng !== "number")) {
+          writes.push(storage.set("miejsce", { ...miejsce, lat: 51.8667, lng: 20.8667 }));
+        }
+        await Promise.all(writes);
+
+        // Seed demo data on first run
         await seedDemoData();
-        // One-time migration: ensure Miejsce has lat/lng (used by sunset widget)
-        try {
-          const m = await storage.get("miejsce");
-          if (m && (typeof m.lat !== "number" || typeof m.lng !== "number")) {
-            await storage.set("miejsce", { ...m, lat: 51.8667, lng: 20.8667 });
-          }
-        } catch (e) { console.warn("Miejsce coord migration skipped", e); }
       } catch (err) {
         console.error("Init error:", err);
         setInitError(err?.message || String(err));
@@ -2254,7 +2308,9 @@ export default function App() {
     case "miejsce":
       content = <MiejsceView user={user} />; break;
     case "profile":
-      content = <ProfileView user={user} onUpdate={onUpdateUser} />; break;
+      content = <ProfileView user={user} onUpdate={onUpdateUser}
+        animated={animated} onToggleAnimated={toggleAnimated}
+        theme={theme} onToggleTheme={toggleTheme} />; break;
     case "goscie":
       if (user.role !== "admin" && !guestListVisible) { content = <EmptyState message="Brak dostępu" />; }
       else content = <GoscieView user={user} users={users} />;
@@ -2271,7 +2327,7 @@ export default function App() {
   return (
     <>
       <GlobalStyles />
-      <AnimatedBackground />
+      <AnimatedBackground animated={animated} />
       <div className="min-h-screen relative app-shell">
         <Header user={user} guestListVisible={guestListVisible}
           currentView={view} onNavigate={navigate}

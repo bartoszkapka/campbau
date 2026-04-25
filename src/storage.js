@@ -40,6 +40,20 @@ const lsImpl = {
       }
       return { keys, prefix, shared: true };
     } catch { return { keys: [] }; }
+  },
+  async getAll(prefix) {
+    try {
+      const items = [];
+      const scan = LS_PREFIX + (prefix || "");
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(scan)) {
+          const v = localStorage.getItem(k);
+          if (v != null) items.push({ key: k.slice(LS_PREFIX.length), value: v });
+        }
+      }
+      return { items, prefix, shared: true };
+    } catch { return { items: [] }; }
   }
 };
 
@@ -80,6 +94,14 @@ const apiImpl = {
       throw new Error(`list ${prefix} -> ${r.status}: ${detail.slice(0, 200)}`);
     }
     return r.json();
+  },
+  async getAll(prefix) {
+    const r = await fetch(`/api/storage/getAll?prefix=${encodeURIComponent(prefix || "")}`);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw new Error(`getAll ${prefix} -> ${r.status}: ${detail.slice(0, 200)}`);
+    }
+    return r.json();
   }
 };
 
@@ -104,13 +126,41 @@ const emitError = (op, key, err) => {
   }
 };
 
+// Simple in-memory cache. Cleared on any mutation that affects a key.
+// TTL keeps us safe from staleness if multiple tabs/users edit at once.
+const CACHE_TTL_MS = 30_000;
+const cache = new Map(); // key/prefix -> { value, ts }
+
+const cacheGet = (k) => {
+  const e = cache.get(k);
+  if (!e) return undefined;
+  if (Date.now() - e.ts > CACHE_TTL_MS) { cache.delete(k); return undefined; }
+  return e.value;
+};
+const cacheSet = (k, v) => cache.set(k, { value: v, ts: Date.now() });
+const cacheInvalidate = (key) => {
+  cache.delete("get:" + key);
+  // Invalidate any prefix that this key would match (e.g. setting `cnota:abc` invalidates `getAll:cnota:`)
+  const colon = key.indexOf(":");
+  if (colon >= 0) {
+    const prefix = key.slice(0, colon + 1);
+    cache.delete("getAll:" + prefix);
+    cache.delete("list:" + prefix);
+  }
+  cache.delete("getAll:");
+  cache.delete("list:");
+};
+
 export const storage = {
   async get(key) {
+    const cached = cacheGet("get:" + key);
+    if (cached !== undefined) return cached;
     try {
       const r = await rawStorage.get(key);
-      return r ? JSON.parse(r.value) : null;
+      const value = r ? JSON.parse(r.value) : null;
+      cacheSet("get:" + key, value);
+      return value;
     } catch (err) {
-      // get is allowed to "fail" (404 means missing) without alarming UI
       if (!String(err?.message || "").includes("404")) {
         console.warn("storage.get failed", key, err);
       }
@@ -120,6 +170,8 @@ export const storage = {
   async set(key, value) {
     try {
       await rawStorage.set(key, JSON.stringify(value));
+      cacheInvalidate(key);
+      cacheSet("get:" + key, value);
       return true;
     } catch (err) {
       emitError("set", key, err);
@@ -127,21 +179,47 @@ export const storage = {
     }
   },
   async delete(key) {
-    try { await rawStorage.delete(key); return true; }
-    catch (err) { emitError("delete", key, err); return false; }
+    try {
+      await rawStorage.delete(key);
+      cacheInvalidate(key);
+      return true;
+    } catch (err) { emitError("delete", key, err); return false; }
   },
   async list(prefix) {
+    const cached = cacheGet("list:" + (prefix || ""));
+    if (cached !== undefined) return cached;
     try {
       const r = await rawStorage.list(prefix);
-      return r?.keys || [];
+      const keys = r?.keys || [];
+      cacheSet("list:" + (prefix || ""), keys);
+      return keys;
     } catch (err) {
       emitError("list", prefix, err);
       return [];
     }
   },
   async getAll(prefix) {
-    const keys = await this.list(prefix);
-    const items = await Promise.all(keys.map(k => this.get(k)));
-    return items.filter(Boolean);
-  }
+    const cached = cacheGet("getAll:" + (prefix || ""));
+    if (cached !== undefined) return cached;
+    try {
+      const r = await rawStorage.getAll(prefix);
+      const items = r?.items || [];
+      const result = [];
+      for (const item of items) {
+        try {
+          const parsed = JSON.parse(item.value);
+          result.push(parsed);
+          // Prime the per-key get cache too — saves round-trips when detail page opens
+          cacheSet("get:" + item.key, parsed);
+        } catch {}
+      }
+      cacheSet("getAll:" + (prefix || ""), result);
+      return result;
+    } catch (err) {
+      emitError("getAll", prefix, err);
+      return [];
+    }
+  },
+  // Manual cache controls for special cases
+  invalidateAll() { cache.clear(); }
 };

@@ -1078,6 +1078,11 @@ const MOON_NAMES_PL = [
   "Pełnia", "Ubywający garb", "Ostatnia kwadra", "Ubywający sierp",
 ];
 
+// Unicode moon phase glyphs in the same order as MOON_NAMES_PL.
+// 🌑 new, 🌒 waxing crescent, 🌓 first quarter, 🌔 waxing gibbous,
+// 🌕 full, 🌖 waning gibbous, 🌗 last quarter, 🌘 waning crescent.
+const MOON_PHASE_GLYPHS = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"];
+
 const computeMoonPhase = (date) => {
   // Reference new moon: 2000-01-06 18:14 UTC
   const refJD = 2451549.5 + (18 * 60 + 14) / (24 * 60);
@@ -1094,36 +1099,33 @@ const computeMoonPhase = (date) => {
   else if (phase < 0.6875) idx = 5;
   else if (phase < 0.8125) idx = 6;
   else idx = 7;
-  return { phase, illumination, name: MOON_NAMES_PL[idx] };
+  return { phase, illumination, idx, name: MOON_NAMES_PL[idx] };
 };
 
-const MoonSvg = ({ phase, size = 36 }) => {
-  const illum = (1 - Math.cos(2 * Math.PI * phase)) / 2;
-  const waning = phase > 0.5;
-  const r = size * 0.42;
-  const cx = size / 2;
-  const cy = size / 2;
-
-  // Near-new moon → just outline (avoids degenerate path)
-  if (illum < 0.015) {
-    return (
-      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} className="inline-block shrink-0">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth="1" opacity="0.6" />
-      </svg>
-    );
+// Renders the current phase as one of the eight standard moon-phase glyphs.
+// Maps directly to the photographic moon icons everyone recognises rather than
+// drawing a stylised crescent — visually accurate to the real phases.
+// Kept as MoonSvg for callsite compatibility; size is used as the font size.
+const MoonSvg = ({ phase, idx, size = 36 }) => {
+  // Allow callers to pass either an explicit idx (preferred — already computed
+  // by computeMoonPhase) or just a phase (recomputed here as fallback).
+  let i = typeof idx === "number" ? idx : null;
+  if (i === null) {
+    if (phase < 0.0625 || phase >= 0.9375) i = 0;
+    else if (phase < 0.1875) i = 1;
+    else if (phase < 0.3125) i = 2;
+    else if (phase < 0.4375) i = 3;
+    else if (phase < 0.5625) i = 4;
+    else if (phase < 0.6875) i = 5;
+    else if (phase < 0.8125) i = 6;
+    else i = 7;
   }
-
-  const absRx = Math.abs(2 * illum - 1) * r;
-  const sweep = illum < 0.5 ? 1 : 0;
-  const pathD = `M ${cx} ${cy - r} A ${r} ${r} 0 0 1 ${cx} ${cy + r} A ${absRx} ${r} 0 0 ${sweep} ${cx} ${cy - r} Z`;
-
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} className="inline-block shrink-0">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth="1" opacity="0.35" />
-      <g transform={waning ? `matrix(-1 0 0 1 ${size} 0)` : undefined}>
-        <path d={pathD} fill="currentColor" fillRule="evenodd" />
-      </g>
-    </svg>
+    <span aria-hidden
+      className="emoji-mono inline-block leading-none shrink-0 align-middle"
+      style={{ fontSize: `${size}px` }}>
+      {MOON_PHASE_GLYPHS[i]}
+    </span>
   );
 };
 
@@ -1210,7 +1212,7 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
             <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 leading-none">Księżyc</div>
             <div className="font-mono text-[9px] uppercase tracking-widest opacity-60 leading-none mt-0.5 whitespace-nowrap">{moon.name}</div>
           </div>
-          <MoonSvg phase={moon.phase} size={28} />
+          <MoonSvg phase={moon.phase} idx={moon.idx} size={28} />
         </div>
       </div>
       <div ref={scrollRef}

@@ -78,7 +78,6 @@ const GlobalStyles = () => (
     .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 4.4s ease-in-out infinite alternate; }
     .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 5.2s ease-in-out infinite alternate; }
     .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 6s ease-in-out infinite alternate; }
-    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 4.8s ease-in-out infinite alternate; }
 
     /* Mobile: double durations to halve GPU work over time. The motion is
        still continuous but each frame's transform delta is smaller, so the
@@ -89,32 +88,38 @@ const GlobalStyles = () => (
       .blob-3 { animation-duration: 8.8s; }
       .blob-4 { animation-duration: 10.4s; }
       .blob-5 { animation-duration: 12s; }
-      .blob-6 { animation-duration: 9.6s; }
     }
 
+    /* Each blob now has 3 keyframes (0/50/100) instead of 2, with bigger
+       displacement ranges. Combined with alternate direction and ease-in-out
+       timing, this produces a noticeably less linear-feeling drift — blobs
+       arc through the middle keyframe rather than pingponging back and forth
+       between the same two positions. Scale also varies more per keyframe so
+       the gradient field feels more alive. */
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
-      100% { transform: translate3d(10vmax, 30vmax, 0) scale(1.1); }
+      50%  { transform: translate3d(20vmax, 15vmax, 0) scale(1.15); }
+      100% { transform: translate3d(-8vmax, 35vmax, 0) scale(0.95); }
     }
     @keyframes floatB {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
-      100% { transform: translate3d(-15vmax, 25vmax, 0) scale(0.92); }
+      50%  { transform: translate3d(-25vmax, 10vmax, 0) scale(0.85); }
+      100% { transform: translate3d(-12vmax, 30vmax, 0) scale(1.1); }
     }
     @keyframes floatC {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
-      100% { transform: translate3d(15vmax, -25vmax, 0) scale(1.05); }
+      50%  { transform: translate3d(20vmax, -15vmax, 0) scale(1.12); }
+      100% { transform: translate3d(-5vmax, -28vmax, 0) scale(0.9); }
     }
     @keyframes floatD {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
-      100% { transform: translate3d(-10vmax, -10vmax, 0) scale(1.1); }
+      50%  { transform: translate3d(-18vmax, 5vmax, 0) scale(1.18); }
+      100% { transform: translate3d(-8vmax, -20vmax, 0) scale(0.92); }
     }
     @keyframes floatE {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
-      100% { transform: translate3d(-20vmax, 15vmax, 0) scale(0.95); }
-    }
-    @keyframes floatF {
-      0%   { transform: translate3d(0, 0, 0) scale(1); }
-      100% { transform: translate3d(-25vmax, 20vmax, 0) scale(1.08); }
+      50%  { transform: translate3d(-25vmax, -10vmax, 0) scale(1.2); }
+      100% { transform: translate3d(-15vmax, 22vmax, 0) scale(0.85); }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -276,36 +281,67 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-// Animated background — six floating blurred blobs.
-// Listens to document.visibilitychange and pauses the CSS animations when
-// the document is hidden (tab backgrounded, app switched, lock screen on
-// iOS). This sidesteps an iOS Safari issue where long-running CSS animations
-// progressively drop frames while the page isn't visible, causing visible
-// stutter when the user returns. Resuming on visibilitychange means the
-// animation restarts at full smoothness rather than catching up from a
-// degraded state.
+// Animated background — five floating blurred blobs.
+//
+// Two iOS-Safari quirks are mitigated here:
+//
+// 1. Long-running animations stutter over time. iOS Safari's compositor
+//    builds up dropped frames in the animation timeline; eventually the GPU
+//    layers thrash and the page jitters. The user observed that toggling the
+//    animation off/on fixes it temporarily — that's the textbook fingerprint
+//    of stale GPU layers being evicted and rebuilt. We do that programmatically
+//    every RESTART_INTERVAL: bump a `cycle` counter passed as the React key,
+//    which fully unmounts and remounts the blob nodes. Safari throws away the
+//    old layers and starts fresh. The visual blip is invisible (a single
+//    frame at most) because the new blobs render at the same starting state.
+//
+// 2. Animations accumulate dropped frames while backgrounded. We pause the
+//    animation entirely when document.visibilityState === "hidden", so
+//    nothing's running while the user is away and the timeline doesn't grow.
+//
+const RESTART_INTERVAL_MS = 90 * 1000; // 90 seconds — short enough to stay
+                                       // ahead of iOS's stutter onset, long
+                                       // enough that any visual blip is rare.
+
 const AnimatedBackground = ({ animated = true }) => {
   const [hidden, setHidden] = useState(() =>
     typeof document !== "undefined" && document.visibilityState === "hidden"
   );
+  // Bumped every RESTART_INTERVAL_MS while the page is visible. Used as a
+  // React key to remount the blob layer.
+  const [cycle, setCycle] = useState(0);
+
   useEffect(() => {
     const onVis = () => setHidden(document.visibilityState === "hidden");
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
+
+  // Don't run the restart timer when the animation is off (no benefit) or
+  // when the page is hidden (visibilitychange will fire when we return).
+  useEffect(() => {
+    if (!animated || hidden) return;
+    const id = setInterval(() => setCycle(c => c + 1), RESTART_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [animated, hidden]);
+
   const cls = [
     "bg-stage",
     !animated && "bg-stage-static",
     hidden && "bg-stage-paused",
   ].filter(Boolean).join(" ");
+
   return (
     <div className={cls} aria-hidden>
-      <div className="blob blob-1" />
-      <div className="blob blob-2" />
-      <div className="blob blob-3" />
-      <div className="blob blob-4" />
-      <div className="blob blob-5" />
-      <div className="blob blob-6" />
+      {/* React key cycles every RESTART_INTERVAL_MS, forcing a full unmount
+          and remount of the blob layer so iOS Safari rebuilds GPU layers. */}
+      <div key={cycle} className="contents">
+        <div className="blob blob-1" />
+        <div className="blob blob-2" />
+        <div className="blob blob-3" />
+        <div className="blob blob-4" />
+        <div className="blob blob-5" />
+      </div>
     </div>
   );
 };
@@ -1022,7 +1058,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
 const PageHeader = ({ title, subtitle, action }) => (
   <div className="px-5 pt-8 pb-6">
     <div className="flex items-start justify-between gap-4 mb-2">
-      <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold uppercase leading-[0.95] break-words">{title}</h1>
+      <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] break-words">{title}</h1>
       {action}
     </div>
     {subtitle && <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-3">{subtitle}</p>}
@@ -3146,47 +3182,48 @@ const FestiwalView = ({ user }) => {
             <div className="px-5 space-y-16 pt-6">
               {sections.map((s, idx) => {
                 const photoLeft = s.photo && s.photoSide === "left";
-                return (
-                <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
-                  {/* Header row: emoji square stacked above title; admin
-                      controls on the right. The emoji square is a 95% black
-                      tile (matching globals) with the section's emoji
-                      centered, white-on-black to read as a clear marker. */}
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="min-w-0 flex-1">
-                      {s.icon && (
-                        <div className="w-16 h-16 bg-black text-white flex items-center justify-center mb-3">
-                          <span className="text-4xl leading-none emoji-mono">{s.icon}</span>
-                        </div>
-                      )}
-                      <h2 className="font-display text-3xl font-bold uppercase leading-tight">{s.title}</h2>
-                    </div>
-                    {isAdmin && (
-                      <div className="flex gap-1 shrink-0">
-                        <button onClick={() => reorder(s.id, -1)} disabled={idx === 0}
-                          className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↑</button>
-                        <button onClick={() => reorder(s.id, 1)} disabled={idx === sections.length - 1}
-                          className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↓</button>
-                        <Button variant="outline" size="sm" onClick={() => { setEditing(s); setModalOpen(true); }}>Edytuj</Button>
-                        <Button variant="outline" size="sm" onClick={() => remove(s.id)}>✕</Button>
+                // Renders emoji square + heading + body content as a single
+                // logical column. Reused below for both the no-photo case
+                // (full-width) and the side-by-side case (50% column).
+                const textColumn = (
+                  <div className="min-w-0 flex-1">
+                    {s.icon && (
+                      <div className="w-16 h-16 bg-black text-white flex items-center justify-center mb-3">
+                        <span className="text-4xl leading-none emoji-mono">{s.icon}</span>
                       </div>
                     )}
+                    <h2 className="font-display text-3xl font-bold uppercase leading-tight mb-4">{s.title}</h2>
+                    {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
                   </div>
-                  {/* Body: at lg+, photo and content sit side-by-side with
-                      the photo on the side admin chose. Below lg, photo
-                      stacks above content (mobile-first). flex-row-reverse
-                      handles the "left" placement without duplicating markup. */}
+                );
+                return (
+                <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
+                  {/* Admin controls live in their own row at the top so they
+                      don't mess with the centered photo+text alignment below. */}
+                  {isAdmin && (
+                    <div className="flex justify-end gap-1 mb-3">
+                      <button onClick={() => reorder(s.id, -1)} disabled={idx === 0}
+                        className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↑</button>
+                      <button onClick={() => reorder(s.id, 1)} disabled={idx === sections.length - 1}
+                        className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↓</button>
+                      <Button variant="outline" size="sm" onClick={() => { setEditing(s); setModalOpen(true); }}>Edytuj</Button>
+                      <Button variant="outline" size="sm" onClick={() => remove(s.id)}>✕</Button>
+                    </div>
+                  )}
+                  {/* Body: at lg+, the entire text column (emoji + heading +
+                      content) sits next to the photo, vertically centered
+                      against it via lg:items-center. Below lg, photo stacks
+                      above text. flex-row-reverse handles the "left" image
+                      placement without duplicating markup. */}
                   {s.photo ? (
-                    <div className={`flex flex-col ${photoLeft ? "lg:flex-row-reverse" : "lg:flex-row"} lg:items-start gap-6`}>
-                      <div className="lg:flex-1 min-w-0">
-                        {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
-                      </div>
+                    <div className={`flex flex-col ${photoLeft ? "lg:flex-row-reverse" : "lg:flex-row"} lg:items-center gap-6`}>
+                      {textColumn}
                       <div className="lg:w-1/2 lg:shrink-0">
                         <img src={s.photo} alt="" className="w-full max-h-80 lg:max-h-none object-cover border border-black" />
                       </div>
                     </div>
                   ) : (
-                    s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>
+                    textColumn
                   )}
                 </section>
                 );

@@ -57,12 +57,12 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(40px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 8s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 9.5s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 7.5s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 8.5s ease-in-out infinite alternate; }
-    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 10s ease-in-out infinite alternate; }
-    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 8s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 6s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 7s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 5.5s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 6.5s ease-in-out infinite alternate; }
+    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 7.5s ease-in-out infinite alternate; }
+    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 6s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -1493,38 +1493,49 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
     <div className="pb-20">
       <div className="px-5 pt-8">
         <PwaInstallBanner />
-        {miejsceLoaded && startDate && (
-          <CountdownWidget startDate={startDate} endDate={endDate} />
-        )}
-        {/* If the user has marked every festival day, show the full calendar
-            widget so they can see and edit at a glance. Otherwise nudge them
-            to fill it in via the prompt below. */}
-        {miejsceLoaded && startDate && endDate && (
-          allMarked ? (
-            <div className="mb-6">
-              <AttendanceCalendar user={user} startDate={startDate} endDate={endDate} onUpdate={onUpdate} />
-            </div>
-          ) : (
-            <AttendancePrompt user={user} startDate={startDate} endDate={endDate} onNavigate={onNavigate} />
-          )
-        )}
-        {miejsceLoaded && (
-          <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {tiles.map(t => {
-            const icon = homeTilesOverrides[t.id] || t.icon;
-            return (
-              <button key={t.id} onClick={() => onNavigate(t.id)}
-                className="border border-black p-4 text-left hover:bg-black hover:text-white transition-colors group min-h-[96px] flex items-center gap-4">
-                <div className="text-4xl leading-none shrink-0 emoji-mono">{icon}</div>
-                <div className="min-w-0">
-                  <div className="font-display text-lg mb-1 leading-tight">{t.title}</div>
-                  <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
+        {/* Two-column on desktop: widgets stack on the left (~66% via col-span-2),
+            page list lives in the right rail (~33%). On mobile and tablet
+            (< lg) everything stacks linearly in source order. */}
+        <div className="lg:grid lg:grid-cols-3 lg:gap-6">
+          <div className="lg:col-span-2">
+            {miejsceLoaded && startDate && (
+              <CountdownWidget startDate={startDate} endDate={endDate} />
+            )}
+            {/* If the user has marked every festival day, show the full
+                calendar widget so they can see and edit at a glance.
+                Otherwise nudge them to fill it in via the prompt. */}
+            {miejsceLoaded && startDate && endDate && (
+              allMarked ? (
+                <div className="mb-6">
+                  <AttendanceCalendar user={user} startDate={startDate} endDate={endDate} onUpdate={onUpdate} />
                 </div>
-              </button>
-            );
-          })}
+              ) : (
+                <AttendancePrompt user={user} startDate={startDate} endDate={endDate} onNavigate={onNavigate} />
+              )
+            )}
+            {miejsceLoaded && (
+              <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
+            )}
+          </div>
+          <div className="lg:col-span-1">
+            {/* Page tiles. Mobile: 1 col, sm: 2 cols, lg: 1 col (it's in the
+                33% right sidebar so two side-by-side tiles would be too narrow). */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+              {tiles.map(t => {
+                const icon = homeTilesOverrides[t.id] || t.icon;
+                return (
+                  <button key={t.id} onClick={() => onNavigate(t.id)}
+                    className="border border-black p-4 text-left hover:bg-black hover:text-white transition-colors group min-h-[96px] flex items-center gap-4">
+                    <div className="text-4xl leading-none shrink-0 emoji-mono">{icon}</div>
+                    <div className="min-w-0">
+                      <div className="font-display text-lg mb-1 leading-tight">{t.title}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1783,16 +1794,8 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj stację" : "Nowa stacja"}>
       <form onSubmit={submit} className="space-y-4">
-        <div>
-          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Emoji</span>
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 border border-black flex items-center justify-center text-3xl emoji-mono shrink-0">
-              {form.icon || "·"}
-            </div>
-            <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
-              onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
-          </div>
-        </div>
+        <Input label="Emoji" placeholder="Wpisz emoji" value={form.icon}
+          onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} />
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
@@ -2240,6 +2243,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
                             {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
+                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">✍️</span> Zapisy</span>}
                             {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
                             {it.time && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{it.time.slice(0, 5)}</span>}
                           </div>
@@ -2281,7 +2285,10 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         ) : null}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5 inline-block mb-2"><span className="emoji-mono">🚌</span> Kosmobus</span>}
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              {it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">✍️</span> Zapisy</span>}
+                              {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
+                            </div>
                             <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">
                               {it.image && it.icon && <span className="mr-2 emoji-mono">{it.icon}</span>}{it.title}
                             </h3>
@@ -2389,8 +2396,8 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
         <div className="border-t border-black pt-4 space-y-2">
           <ToggleTile checked={form.guestListEnabled}
             onChange={v => update("guestListEnabled", v)}
-            emoji="👥"
-            title="Lista gości"
+            emoji="✍️"
+            title="Zapisy"
             subtitle="Goście mogą zapisywać się sami; admin zarządza listą" />
           <ToggleTile checked={form.transportNeeded}
             onChange={v => update("transportNeeded", v)}
@@ -2615,24 +2622,24 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
         <div className="flex flex-wrap gap-2 mb-3">
           {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
           {item.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
-          {item.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">👥</span> Lista gości</span>}
+          {item.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">✍️</span> Zapisy</span>}
           {item.transportNeeded && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">🚗</span> Transport</span>}
           {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}{item.title}
         </h1>
-        {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
+        {item.description && <div className="prose-simple text-base mb-10">{renderRichText(item.description)}</div>}
       </div>
 
       {/* Guest list section */}
       {item.guestListEnabled && (
-        <div className="mx-5 border border-black p-5 mb-6">
+        <div className="mx-5 border border-black p-5 mb-10">
           <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl emoji-mono">👥</span>
-                <h2 className="font-display text-xl">Lista gości</h2>
+                <span className="text-2xl emoji-mono">✍️</span>
+                <h2 className="font-display text-xl">Zapisy</h2>
               </div>
               <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
                 {guestUsers.length} {guestUsers.length === 1 ? "osoba" : "osób"}
@@ -2671,7 +2678,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
 
       {/* Transport section */}
       {item.transportNeeded && (
-        <div className="mx-5 mb-6 space-y-4">
+        <div className="mx-5 mb-10 space-y-6">
           <div className="flex items-center gap-2">
             <span className="text-2xl emoji-mono">🚗</span>
             <h2 className="font-display text-xl">Transport</h2>
@@ -3974,6 +3981,14 @@ export default function App() {
     return seg || "home";
   };
   const view = pathToView(location.pathname);
+
+  // Reset window scroll to the top whenever the user navigates to a different
+  // path. Without this, switching between pages keeps the previous scroll
+  // offset, which is jarring (especially when going from a long scrollable
+  // list to a fresh page).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const [animated, setAnimated] = useState(() => {
     try {

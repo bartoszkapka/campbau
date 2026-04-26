@@ -57,12 +57,12 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(40px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 6s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 7s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 5.5s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 6.5s ease-in-out infinite alternate; }
-    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 7.5s ease-in-out infinite alternate; }
-    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 6s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 4.8s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 5.6s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 4.4s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 5.2s ease-in-out infinite alternate; }
+    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 6s ease-in-out infinite alternate; }
+    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 4.8s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -151,10 +151,28 @@ const GlobalStyles = () => (
       box-shadow: 0 1px 0 rgba(13, 13, 13, 0.08), 0 4px 12px -8px rgba(13, 13, 13, 0.18);
     }
 
-    /* Monochrome map — Google Maps embed gets desaturated to match aesthetic.
-       Filter is applied to the rendered output (cross-origin iframe is fine). */
+    /* Map tinting — replace Google's default greens/blues with the same
+       gradient palette as the animated background. The container creates an
+       isolated stacking context, an absolutely-positioned ::after carries
+       the gradient, and mix-blend-mode color applies the gradient's
+       hue+saturation to the iframe's luminosity. The map's structure
+       (roads, streets, shapes) stays readable, but the colors match the
+       app aesthetic. pointer-events none keeps the iframe interactive. */
+    .map-container {
+      position: relative;
+      isolation: isolate;
+    }
+    .map-container::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(135deg, #7ef7ff 0%, #ffc2ce 25%, #e872f5 50%, #9080ff 75%, #7ef7ff 100%);
+      mix-blend-mode: color;
+      z-index: 1;
+    }
     .map-iframe {
-      filter: grayscale(1) contrast(1.05);
+      display: block;
     }
 
     /* Render colored emojis as monochrome — best effort with grayscale + contrast.
@@ -364,8 +382,12 @@ const formatDate = (date, time) => {
   if (!date) return "";
   const d = new Date(date + (time ? "T" + time : "T00:00"));
   if (isNaN(d)) return date;
-  const opts = { day: "2-digit", month: "short", year: "numeric" };
-  let str = d.toLocaleDateString("pl-PL", opts);
+  // DD/MM/YYYY — explicit pad so we don't depend on locale to produce 2-digit
+  // day/month consistently. Polish locale would otherwise print "1.4.2026".
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  let str = `${dd}/${mm}/${yyyy}`;
   if (time) str += ` · ${time.slice(0, 5)}`;
   return str;
 };
@@ -1701,16 +1723,18 @@ const StacjaCard = ({ item, users, mystery, onClick }) => {
     return u ? displayNameOf(u) : null;
   }).filter(Boolean).slice(0, 3).join(", ") || "—";
 
-  // Date display logic:
+  // Date display logic on the list card. We deliberately hide the
+  // "Sugestia: …" case here — suggestions are noise on the overview tile.
+  // The detail view still surfaces it. Cases:
   //   hasDate + date  → formal date/time
-  //   hasDate + suggestion (no date) → "Sugestia: <text>"
+  //   hasDate + suggestion (no date) → no line on the card
   //   hasDate + nothing → "Data do ustalenia"
-  //   !hasDate → no row
+  //   !hasDate → no line
   const hasDate = item.hasDate || !!item.date;
   let dateLine = null;
   if (hasDate) {
     if (item.date) dateLine = formatDate(item.date, item.time);
-    else if (item.dateSuggestion) dateLine = `Sugestia: ${item.dateSuggestion}`;
+    else if (item.dateSuggestion) dateLine = null;
     else dateLine = "Data do ustalenia";
   }
 
@@ -2232,10 +2256,11 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                       onClick={it._type === "stacja" ? () => onOpenStacja(it.id) : () => openEvent(it.id)}>
                       <div className="flex">
                         {it.image ? (
-                          <img src={it.image} alt=""
-                            className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
+                          <div className="w-28 sm:w-40 shrink-0 border-r border-black overflow-hidden bg-black/5">
+                            <img src={it.image} alt="" className="w-full h-full object-cover" />
+                          </div>
                         ) : it.icon ? (
-                          <div className="w-28 h-28 sm:w-40 sm:h-40 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
+                          <div className="w-28 sm:w-40 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
                             <span className="text-5xl sm:text-6xl emoji-mono">{it.icon}</span>
                           </div>
                         ) : null}
@@ -2243,9 +2268,9 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
                             {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
-                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">✍️</span> Zapisy</span>}
-                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
-                            {it.time && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{it.time.slice(0, 5)}</span>}
+                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Zapisy</span>}
+                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Kosmobus</span>}
+                            {it.time && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{it.time.slice(0, 5)}</span>}
                           </div>
                           <div className="flex items-start justify-between gap-3 flex-1">
                             <div className="flex-1 min-w-0">
@@ -2276,18 +2301,19 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                     <Card key={it.id} className="overflow-hidden" onClick={() => openEvent(it.id)}>
                       <div className="flex">
                         {it.image ? (
-                          <img src={it.image} alt=""
-                            className="w-28 h-28 sm:w-40 sm:h-40 object-cover border-r border-black shrink-0" />
+                          <div className="w-28 sm:w-40 shrink-0 border-r border-black overflow-hidden bg-black/5">
+                            <img src={it.image} alt="" className="w-full h-full object-cover" />
+                          </div>
                         ) : it.icon ? (
-                          <div className="w-28 h-28 sm:w-40 sm:h-40 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
+                          <div className="w-28 sm:w-40 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
                             <span className="text-5xl sm:text-6xl emoji-mono">{it.icon}</span>
                           </div>
                         ) : null}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-2">
-                              {it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">✍️</span> Zapisy</span>}
-                              {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
+                              {it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Zapisy</span>}
+                              {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Kosmobus</span>}
                             </div>
                             <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">
                               {it.image && it.icon && <span className="mr-2 emoji-mono">{it.icon}</span>}{it.title}
@@ -3274,24 +3300,19 @@ const MiejsceView = ({ user, onUpdate }) => {
     : null;
   const mapLinkUrl = data.mapQuery ? `https://www.google.com/maps?q=${encodeURIComponent(data.mapQuery)}` : null;
 
-  // Festival dates display
+  // Festival dates display — DD/MM/YYYY across the board.
   const fmtDate = (s) => {
     if (!s) return "";
-    return new Date(s + "T12:00").toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" });
+    const d = new Date(s + "T12:00");
+    if (isNaN(d)) return s;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}/${mm}/${d.getFullYear()}`;
   };
   const fmtRange = () => {
     if (!data.startDate && !data.endDate) return null;
     if (data.startDate && data.endDate && data.startDate === data.endDate) return fmtDate(data.startDate);
-    if (data.startDate && data.endDate) {
-      const a = new Date(data.startDate + "T12:00");
-      const b = new Date(data.endDate + "T12:00");
-      const sameYear = a.getFullYear() === b.getFullYear();
-      const sameMonth = sameYear && a.getMonth() === b.getMonth();
-      if (sameMonth) {
-        return `${a.getDate()}–${b.getDate()} ${a.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })}`;
-      }
-      return `${fmtDate(data.startDate)} – ${fmtDate(data.endDate)}`;
-    }
+    if (data.startDate && data.endDate) return `${fmtDate(data.startDate)} – ${fmtDate(data.endDate)}`;
     return fmtDate(data.startDate || data.endDate);
   };
   const dateRangeText = fmtRange();

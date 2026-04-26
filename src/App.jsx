@@ -1056,7 +1056,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
 // PAGE HEADER
 // ============================================================
 const PageHeader = ({ title, subtitle, action }) => (
-  <div className="px-5 pt-8 pb-6">
+  <div className="px-5 pt-16 pb-6">
     <div className="flex items-start justify-between gap-4 mb-2">
       <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] break-words">{title}</h1>
       {action}
@@ -1606,7 +1606,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
 
   return (
     <div className="pb-20">
-      <div className="px-5 pt-8">
+      <div className="px-5 pt-16">
         <PwaInstallBanner />
         {/* Two-column on desktop: widgets stack on the left (~66% via col-span-2),
             page list lives in the right rail (~33%). On mobile and tablet
@@ -3898,29 +3898,127 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
 // ============================================================
 // GOŚCIE (GUEST LIST) VIEW
 // ============================================================
-const GoscieView = ({ user, users }) => {
+const GoscieView = ({ user, users, attendanceVisible }) => {
+  const isAdmin = user.role === "admin";
+  // Admins always see attendance; regular users see it when admin has opted
+  // to share. Either way the data lives on each user record (read-only here).
+  const canSeeAttendance = isAdmin || !!attendanceVisible;
+
+  // Festival days for the attendance grid columns. Loaded from the miejsce
+  // record once on mount; stays empty until that resolves.
+  const [days, setDays] = useState([]);
+  useEffect(() => {
+    storage.get("miejsce").then(m => {
+      if (!m?.startDate || !m?.endDate) return;
+      const start = new Date(m.startDate + "T12:00");
+      const end = new Date(m.endDate + "T12:00");
+      if (isNaN(start) || isNaN(end) || start > end) return;
+      const result = [];
+      const cur = new Date(start);
+      let safety = 0;
+      while (cur <= end && safety < 100) {
+        result.push(cur.toISOString().slice(0, 10));
+        cur.setDate(cur.getDate() + 1);
+        safety++;
+      }
+      setDays(result);
+    }).catch(() => {});
+  }, []);
+
   const sorted = [...users].sort((a, b) => {
     const an = displayNameOf(a).toLowerCase();
     const bn = displayNameOf(b).toLowerCase();
     return an.localeCompare(bn);
   });
+
+  // Render a single attendance status tile for a (user, day) pair. Filled
+  // black for "yes", dashed border for "maybe", X for "no", muted dot for
+  // unmarked. Same visual language as AttendanceCalendar so the meaning
+  // transfers across the app.
+  const AttendanceCell = ({ status }) => {
+    const base = "w-7 h-7 border flex items-center justify-center font-display text-[11px] shrink-0";
+    if (status === "yes")   return <div className={`${base} border-black bg-black text-white`}>✓</div>;
+    if (status === "maybe") return <div className={`${base} border-black border-dashed`}>?</div>;
+    if (status === "no")    return <div className={`${base} border-black opacity-40`}>✕</div>;
+    return <div className={`${base} border-black/20 opacity-40`}>·</div>;
+  };
+
+  // Day-of-month label for the column header in the attendance grid.
+  const fmtDayHeader = (iso) => {
+    const d = new Date(iso + "T12:00");
+    if (isNaN(d)) return iso;
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${dd}/${mm}`;
+  };
+
   return (
     <div className="pb-20">
       <PageHeader title="Goście" subtitle={`${users.length} ${users.length === 1 ? "osoba" : "osób"}`} />
       <div className="px-5 space-y-2">
-        {sorted.map(u => (
-          <div key={u.id} className="flex items-center gap-3 border border-black p-3">
-            <div className="w-12 h-12 border border-black overflow-hidden shrink-0 bg-white">
-              {u.profilePicture
-                ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center font-display text-lg font-bold">{displayInitialOf(u)}</div>}
+        {sorted.map(u => {
+          const att = u.attendance || {};
+          const counts = days.reduce((acc, d) => {
+            const v = att[d];
+            if (v === "yes") acc.yes++;
+            else if (v === "maybe") acc.maybe++;
+            else if (v === "no") acc.no++;
+            return acc;
+          }, { yes: 0, maybe: 0, no: 0 });
+          return (
+            <div key={u.id} className="border border-black">
+              <div className="flex items-center gap-3 p-3">
+                <div className="w-12 h-12 border border-black overflow-hidden shrink-0 bg-white">
+                  {u.profilePicture
+                    ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center font-display text-lg font-bold">{displayInitialOf(u)}</div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
+                  <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
+                </div>
+                {/* Inline summary tags — only when we have attendance data and
+                    are allowed to show it. Compact at-a-glance read of "how
+                    many days this person said yes/maybe/no". */}
+                {canSeeAttendance && days.length > 0 && (counts.yes + counts.maybe + counts.no > 0) && (
+                  <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                    {counts.yes > 0 && (
+                      <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">
+                        {counts.yes} ✓
+                      </span>
+                    )}
+                    {counts.maybe > 0 && (
+                      <span className="font-mono text-[10px] uppercase tracking-widest border border-black border-dashed px-2 py-0.5">
+                        {counts.maybe} ?
+                      </span>
+                    )}
+                    {counts.no > 0 && (
+                      <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5 opacity-60">
+                        {counts.no} ✕
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Per-day attendance grid. Scrolls horizontally if more days
+                  than fit. Day-of-month labels above each cell so the row
+                  is self-explanatory without needing a separate header row. */}
+              {canSeeAttendance && days.length > 0 && (
+                <div className="border-t border-black/20 px-3 py-2 overflow-x-auto no-scrollbar"
+                  style={{ touchAction: "pan-x pan-y" }}>
+                  <div className="flex items-end gap-1.5 w-max">
+                    {days.map(d => (
+                      <div key={d} className="flex flex-col items-center gap-1">
+                        <span className="font-mono text-[9px] uppercase tracking-widest opacity-60">{fmtDayHeader(d)}</span>
+                        <AttendanceCell status={att[d]} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-              <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -3988,7 +4086,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   );
 };
 
-const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, homeTilesOverrides = {}, onSaveHomeTileIcon }) => {
+const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, homeTilesOverrides = {}, onSaveHomeTileIcon }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -4045,6 +4143,10 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
           checked={stacjeListVisible} onChange={onToggleStacjeList}
           title="Lista stacji kosmicznych"
           subtitle={stacjeListVisible ? "Widoczna dla wszystkich" : "Ukryta — widoczny tylko opis"} />
+        <ToggleTile size="lg"
+          checked={!!attendanceVisible} onChange={onToggleAttendance}
+          title="Obecność gości"
+          subtitle={attendanceVisible ? "Widoczna dla wszystkich gości" : "Widoczna tylko dla adminów"} />
         <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -4129,6 +4231,9 @@ export default function App() {
   // Whether non-admins see the stacja list. Default true (status quo for existing
   // installations); admin can hide it from the admin page.
   const [stacjeListVisible, setStacjeListVisible] = useState(true);
+  // Whether non-admin guests can see other guests' attendance. Default false
+  // (privacy-respecting); admin can opt to share it via the admin page.
+  const [attendanceVisible, setAttendanceVisible] = useState(false);
   // Per-tile emoji overrides for the home page. Keyed by tile id (e.g.
   // "wydarzenia"), value is the emoji string. Missing keys fall back to the
   // default in HOME_TILES. Persisted at storage key `home_tiles`.
@@ -4202,6 +4307,7 @@ export default function App() {
           ]);
           setGuestListVisible(!!settings?.guestListVisible);
           setStacjeListVisible(settings?.stacjeListVisible !== false);
+          setAttendanceVisible(!!settings?.attendanceVisible);
           setHomeTilesOverrides(homeTiles || {});
           setInitialized(true);
           return;
@@ -4222,10 +4328,11 @@ export default function App() {
           }));
         }
         if (!settings) {
-          writes.push(storage.set("settings", { guestListVisible: false, stacjeListVisible: true }));
+          writes.push(storage.set("settings", { guestListVisible: false, stacjeListVisible: true, attendanceVisible: false }));
         } else {
           setGuestListVisible(!!settings.guestListVisible);
           setStacjeListVisible(settings.stacjeListVisible !== false);
+          setAttendanceVisible(!!settings.attendanceVisible);
         }
         if (miejsce && (typeof miejsce.lat !== "number" || typeof miejsce.lng !== "number")) {
           writes.push(storage.set("miejsce", { ...miejsce, lat: 51.8667, lng: 20.8667 }));
@@ -4268,6 +4375,7 @@ export default function App() {
             if (!cancelled) {
               setGuestListVisible(!!s?.guestListVisible);
               setStacjeListVisible(s?.stacjeListVisible !== false);
+              setAttendanceVisible(!!s?.attendanceVisible);
               setHomeTilesOverrides(homeTiles || {});
             }
             // Warm the cache for the rest of the app
@@ -4299,6 +4407,7 @@ export default function App() {
     ]);
     setGuestListVisible(!!s?.guestListVisible);
     setStacjeListVisible(s?.stacjeListVisible !== false);
+    setAttendanceVisible(!!s?.attendanceVisible);
     setHomeTilesOverrides(homeTiles || {});
     // Warm the cache so navigation feels instant
     storage.prefetchAll("user:");
@@ -4333,6 +4442,13 @@ export default function App() {
     const current = (await storage.get("settings")) || {};
     await storage.set("settings", { ...current, stacjeListVisible: next });
     setStacjeListVisible(next);
+  };
+
+  const onToggleAttendance = async () => {
+    const next = !attendanceVisible;
+    const current = (await storage.get("settings")) || {};
+    await storage.set("settings", { ...current, attendanceVisible: next });
+    setAttendanceVisible(next);
   };
 
   // Save a single home-tile emoji override. Empty string clears the override
@@ -4449,7 +4565,7 @@ export default function App() {
             } />
             <Route path="/goscie" element={
               user.role === "admin" || guestListVisible
-                ? <GoscieView user={user} users={users} />
+                ? <GoscieView user={user} users={users} attendanceVisible={attendanceVisible} />
                 : <EmptyState message="Brak dostępu" />
             } />
             <Route path="/admin" element={
@@ -4457,6 +4573,7 @@ export default function App() {
                 ? <AdminView user={user} users={users} onReloadUsers={loadUsers}
                     guestListVisible={guestListVisible} onToggleGuestList={onToggleGuestList}
                     stacjeListVisible={stacjeListVisible} onToggleStacjeList={onToggleStacjeList}
+                    attendanceVisible={attendanceVisible} onToggleAttendance={onToggleAttendance}
                     homeTilesOverrides={homeTilesOverrides} onSaveHomeTileIcon={onSaveHomeTileIcon} />
                 : <EmptyState message="Brak dostępu" />
             } />

@@ -57,12 +57,12 @@ const GlobalStyles = () => (
     @media (max-width: 768px) {
       .blob { filter: blur(40px); opacity: 1; }
     }
-    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 10.5s ease-in-out infinite alternate; }
-    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 12.75s ease-in-out infinite alternate; }
-    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 9.75s ease-in-out infinite alternate; }
-    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 11.25s ease-in-out infinite alternate; }
-    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 13.5s ease-in-out infinite alternate; }
-    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 10.5s ease-in-out infinite alternate; }
+    .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 8s ease-in-out infinite alternate; }
+    .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 9.5s ease-in-out infinite alternate; }
+    .blob-3 { width: 65vmax; height: 65vmax; background: #9080ff; bottom: -25vmax; left: -20vmax; animation: floatC 7.5s ease-in-out infinite alternate; }
+    .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 8.5s ease-in-out infinite alternate; }
+    .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 10s ease-in-out infinite alternate; }
+    .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 8s ease-in-out infinite alternate; }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -289,6 +289,24 @@ const truncateGraphemes = (str, max = 1) => {
   return Array.from(str).slice(0, max * 2).join("");
 };
 
+// Single source of truth for "what name should we show for this user".
+// When the user has the pseudonym flag on AND has set a non-empty pseudonym,
+// the pseudonym wins everywhere. Otherwise we fall back to firstName + lastName,
+// then finally to username.
+const displayNameOf = (u) => {
+  if (!u) return "";
+  if (u.usePseudonym && (u.pseudonym || "").trim()) return u.pseudonym.trim();
+  const full = [u.firstName, u.lastName].map(s => (s || "").trim()).filter(Boolean).join(" ");
+  return full || u.username || "";
+};
+
+// First-letter avatar fallback. Mirrors the precedence of displayNameOf so
+// the initial visible in an avatar circle matches the name shown next to it.
+const displayInitialOf = (u) => {
+  const n = displayNameOf(u) || u?.username || "?";
+  return n[0]?.toUpperCase() || "?";
+};
+
 // Detects when a sticky-positioned element is "stuck" to the top of the viewport.
 // Returns [stuck, setRef]. Use setRef as the `ref` prop on a 1px sentinel placed
 // just before the sticky element. The callback ref ensures the observer attaches
@@ -491,22 +509,60 @@ const Card = ({ children, className = "", onClick }) => (
   </div>
 );
 
-// Rectangular on/off switch — track is a black-bordered rectangle, the knob
-// is a filled square that slides between the two ends. Used everywhere a
-// boolean is being toggled (visibility flags, optional features, settings).
-const Switch = ({ checked, onChange, disabled = false, label, className = "" }) => (
-  <button type="button" role="switch" aria-checked={!!checked} aria-label={label}
-    onClick={() => !disabled && onChange?.(!checked)}
-    disabled={disabled}
-    className={`relative w-12 h-7 border border-black shrink-0 transition-colors ${
-      disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
-    } ${checked ? "bg-black" : "bg-white"} ${className}`}>
+// Internal indicator inside ToggleTile. Uses currentColor so the knob and
+// track border automatically adapt when the parent tile inverts to black bg
+// (text becomes white → knob and track render white). The knob slides with a
+// smooth eased transition.
+const SwitchIndicator = ({ checked, disabled = false, label }) => (
+  <span role="switch" aria-checked={!!checked} aria-label={label}
+    className={`relative w-12 h-7 border shrink-0 inline-block transition-colors duration-300 ${disabled ? "opacity-40" : ""}`}
+    style={{ borderColor: "currentColor" }}>
     <span aria-hidden
-      className={`absolute top-0.5 bottom-0.5 w-5 transition-all ${
-        checked ? "left-[calc(100%-1.375rem)] bg-white" : "left-0.5 bg-black"
-      }`} />
-  </button>
+      className="absolute top-0.5 bottom-0.5 w-5 transition-all duration-300 ease-out"
+      style={{
+        left: checked ? "calc(100% - 1.375rem)" : "0.125rem",
+        backgroundColor: "currentColor",
+      }} />
+  </span>
 );
+
+// Boolean toggle as a single clickable tile. The whole tile is the click
+// target (not just the switch). When checked, the tile inverts to black bg
+// with white text — the indicator inverts along with it via currentColor.
+// `size` controls density: "sm" for inline form usage, "lg" for top-level
+// settings tiles (e.g. admin page).
+const ToggleTile = ({ checked, onChange, emoji, title, subtitle, disabled = false, size = "sm" }) => {
+  const padding = size === "lg" ? "px-5 py-4" : "px-4 py-3";
+  const titleClass = size === "lg"
+    ? "font-display font-bold uppercase text-base"
+    : "font-display text-sm";
+  return (
+    <button type="button"
+      onClick={() => !disabled && onChange?.(!checked)}
+      disabled={disabled}
+      aria-pressed={!!checked}
+      className={`w-full flex items-center gap-3 border text-left transition-colors duration-300 ${padding} ${
+        disabled
+          ? "opacity-40 cursor-not-allowed border-black bg-transparent text-black"
+          : checked
+            ? "bg-black text-white border-black"
+            : "bg-transparent text-black border-black hover:bg-black/5"
+      }`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          {emoji && <span className="text-base emoji-mono">{emoji}</span>}
+          <span className={titleClass}>{title}</span>
+        </div>
+        {subtitle && (
+          <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${checked ? "opacity-80" : "opacity-60"}`}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+      <SwitchIndicator checked={checked} disabled={disabled} label={title} />
+    </button>
+  );
+};
 
 const Modal = ({ open, onClose, title, children, maxWidth = "max-w-lg" }) => {
   useEffect(() => {
@@ -720,18 +776,20 @@ const LoginView = ({ onLogin, initError }) => {
 // NAVIGATION
 // ============================================================
 const NAV_ITEMS = [
-  { id: "home", label: "Start" },
-  { id: "wydarzenia", label: "Wydarzenia" },
-  { id: "stacje", label: "Stacje kosmiczne" },
-  { id: "festiwal", label: "O Festiwalu" },
-  { id: "miejsce", label: "Gdzie i kiedy" },
-  { id: "profile", label: "Profil", drawerFooter: true },
-  { id: "goscie", label: "Goście" },
-  { id: "admin", label: "Admin", adminOnly: true },
+  { id: "home", label: "Start", icon: "🏠" },
+  { id: "wydarzenia", label: "Wydarzenia", icon: "📅" },
+  { id: "stacje", label: "Stacje kosmiczne", icon: "🛸" },
+  { id: "festiwal", label: "O Festiwalu", icon: "🌌" },
+  { id: "miejsce", label: "Gdzie i kiedy", icon: "📍" },
+  { id: "profile", label: "Profil", icon: "👤", drawerFooter: true },
+  { id: "goscie", label: "Goście", icon: "👥" },
+  { id: "admin", label: "Admin", icon: "⚙️", adminOnly: true },
 ];
 
 const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, onLogout, forceDark = false }) => {
   const items = NAV_ITEMS.filter(it => {
+    // Profile is rendered separately as the avatar button on the right
+    if (it.drawerFooter) return false;
     if (it.adminOnly && user.role !== "admin") return false;
     if (it.id === "goscie" && user.role !== "admin" && !guestListVisible) return false;
     return true;
@@ -789,8 +847,8 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
         {/* Desktop profile — rightmost, avatar + first name */}
         {(() => {
           const profileActive = currentView === "profile";
-          const initial = (user.firstName || user.username)[0]?.toUpperCase() || "?";
-          const displayName = user.firstName || user.username;
+          const initial = displayInitialOf(user) || "?";
+          const displayName = displayNameOf(user);
           return (
             <button onClick={() => onNavigate("profile")}
               aria-label="Profil"
@@ -821,7 +879,7 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
   );
 };
 
-const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible, onLogout }) => {
+const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible, onLogout, homeTilesOverrides = {} }) => {
   if (!open) return null;
   const items = NAV_ITEMS.filter(it => {
     if (it.drawerFooter) return false; // shown separately as avatar block
@@ -838,12 +896,24 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
           <button onClick={onClose} className="text-2xl leading-none p-1" aria-label="Close">✕</button>
         </div>
         <nav className="p-5 space-y-1">
-          {items.map(it => (
-            <button key={it.id} onClick={() => { onNavigate(it.id); onClose(); }}
-              className={`block w-full text-left font-display text-xl py-3 border-b border-black/20 transition-opacity ${currentView === it.id ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
-              {currentView === it.id && <span className="mr-2">·</span>}{it.label}
-            </button>
-          ))}
+          {items.map(it => {
+            // Admin overrides (managed via the Admin page) win over the default
+            // icon set in NAV_ITEMS, so changing an icon there propagates to
+            // the drawer for the same destination.
+            const icon = homeTilesOverrides[it.id] || it.icon;
+            const active = currentView === it.id ||
+              (currentView === "stacja-detail" && it.id === "stacje") ||
+              (currentView === "wydarzenie-detail" && it.id === "wydarzenia");
+            return (
+              <button key={it.id} onClick={() => { onNavigate(it.id); onClose(); }}
+                className={`flex items-center gap-3 w-full text-left font-display text-xl py-3 border-b border-black/20 transition-opacity ${active ? "opacity-100" : "opacity-60 hover:opacity-100"}`}>
+                {icon && <span className="text-2xl emoji-mono shrink-0">{icon}</span>}
+                <span className="flex-1 min-w-0 truncate">
+                  {active && <span className="mr-2">·</span>}{it.label}
+                </span>
+              </button>
+            );
+          })}
         </nav>
         {/* Profile entry — avatar + name + logout */}
         <div className="border-t border-black">
@@ -852,10 +922,10 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
             <div className="w-12 h-12 border border-black overflow-hidden shrink-0">
               {user.profilePicture
                 ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center font-display text-lg">{(user.firstName || user.username)[0]?.toUpperCase()}</div>}
+                : <div className="w-full h-full flex items-center justify-center font-display text-lg">{displayInitialOf(user)}</div>}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-display truncate">{user.firstName || user.username} {user.lastName}</div>
+              <div className="font-display truncate">{displayNameOf(user)}</div>
               <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">@{user.username}{user.role === "admin" && " · admin"}</div>
             </div>
             <div className="font-mono text-xs uppercase tracking-widest opacity-50 shrink-0">Profil →</div>
@@ -1516,7 +1586,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
     <div className="pb-20">
       <PageHeader title="Stacje kosmiczne"
         subtitle={(listVisible || isAdmin) ? `${items.length} ${items.length === 1 ? "stacja" : items.length > 4 ? "stacji" : "stacje"}` : null}
-        action={<Button size="sm" onClick={() => setFormOpen(true)}>+ Dodaj</Button>} />
+        action={(listVisible || isAdmin) ? <Button size="sm" onClick={() => setFormOpen(true)}>+ Dodaj</Button> : null} />
       {(intro || isAdmin) && (
         <div className="px-5 mb-6">
           <div className="relative">
@@ -1617,7 +1687,7 @@ const StacjaCard = ({ item, users, mystery, onClick }) => {
 
   const ownerNames = item.owners?.map(id => {
     const u = users.find(u => u.id === id);
-    return u ? (u.firstName || u.username) : null;
+    return u ? displayNameOf(u) : null;
   }).filter(Boolean).slice(0, 3).join(", ") || "—";
 
   // Date display logic:
@@ -1728,15 +1798,9 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
         <ImageUpload label="Zdjęcie (opcjonalne)" value={form.image} onChange={v => update("image", v)} />
 
         {/* Date flag — anyone editing the stacja (admin or owner) can toggle this. */}
-        <div className="flex items-start gap-3 border border-black px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <div className="font-display text-sm">Z datą i godziną</div>
-            <div className="font-mono text-[10px] uppercase tracking-widest mt-1 opacity-60">
-              Stacja będzie miała wyznaczony termin
-            </div>
-          </div>
-          <Switch checked={form.hasDate} onChange={v => update("hasDate", v)} label="Z datą i godziną" />
-        </div>
+        <ToggleTile checked={form.hasDate} onChange={v => update("hasDate", v)}
+          title="Z datą i godziną"
+          subtitle="Stacja będzie miała wyznaczony termin" />
 
         {form.hasDate && (
           <>
@@ -1922,10 +1986,10 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
               <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
                 {o.profilePicture
                   ? <img src={o.profilePicture} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center font-display font-bold">{(o.firstName || o.username)[0]?.toUpperCase()}</div>}
+                  : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(o)}</div>}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-display font-bold truncate">{o.firstName || o.username} {o.lastName}</div>
+                <div className="font-display font-bold truncate">{displayNameOf(o)}</div>
                 <div className="font-mono text-[10px] uppercase opacity-60">@{o.username}</div>
               </div>
               {canEdit && owners.length > 1 && (
@@ -1953,10 +2017,10 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
                   <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
                     {u.profilePicture
                       ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center font-display font-bold text-black">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+                      : <div className="w-full h-full flex items-center justify-center font-display font-bold text-black">{displayInitialOf(u)}</div>}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="font-display font-bold truncate">{u.firstName || u.username} {u.lastName}</div>
+                    <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
                     <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
                   </div>
                 </button>
@@ -2285,21 +2349,6 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
     });
   };
 
-  // Toggle row — emoji + title + subtitle on the left, Switch on the right.
-  // Disabled state visually dims the row and locks the switch.
-  const ToggleRow = ({ checked, onChange, emoji, title, subtitle, disabled }) => (
-    <div className={`flex items-start gap-3 border border-black px-4 py-3 ${disabled ? "opacity-40" : ""}`}>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          {emoji && <span className="text-base emoji-mono">{emoji}</span>}
-          <span className="font-display text-sm">{title}</span>
-        </div>
-        {subtitle && <div className="font-mono text-[10px] uppercase tracking-widest mt-1 opacity-60">{subtitle}</div>}
-      </div>
-      <Switch checked={checked} onChange={onChange} disabled={disabled} label={title} />
-    </div>
-  );
-
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj wydarzenie" : "Nowe wydarzenie"}>
       <form onSubmit={submit} className="space-y-4">
@@ -2338,17 +2387,17 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
         </div>
         {/* Feature toggles */}
         <div className="border-t border-black pt-4 space-y-2">
-          <ToggleRow checked={form.guestListEnabled}
+          <ToggleTile checked={form.guestListEnabled}
             onChange={v => update("guestListEnabled", v)}
             emoji="👥"
             title="Lista gości"
             subtitle="Goście mogą zapisywać się sami; admin zarządza listą" />
-          <ToggleRow checked={form.transportNeeded}
+          <ToggleTile checked={form.transportNeeded}
             onChange={v => update("transportNeeded", v)}
             emoji="🚗"
             title="Potrzebny transport"
             subtitle="Włącza opcje transportu — Kosmobus i własne podwózki" />
-          <ToggleRow checked={form.kosmobusEnabled}
+          <ToggleTile checked={form.kosmobusEnabled}
             onChange={v => update("kosmobusEnabled", v)}
             disabled={!form.transportNeeded}
             emoji="🚌"
@@ -2697,7 +2746,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                     <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
                       Organizator: {(() => {
                         const o = users.find(u => u.id === t.ownerId);
-                        return o ? (o.firstName || o.username) : "—";
+                        return o ? displayNameOf(o) : "—";
                       })()}
                     </p>
                   </div>
@@ -2793,11 +2842,11 @@ const UserRow = ({ u, badge, showRemove, onRemove }) => (
     <div className="w-9 h-9 border border-black overflow-hidden shrink-0">
       {u.profilePicture
         ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-        : <div className="w-full h-full flex items-center justify-center font-display">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+        : <div className="w-full h-full flex items-center justify-center font-display">{displayInitialOf(u)}</div>}
     </div>
     <div className="flex-1 min-w-0">
       <div className="font-display text-sm truncate">
-        {u.firstName || u.username} {u.lastName}
+        {displayNameOf(u)}
         {badge && <span className="ml-2 font-mono text-[9px] uppercase tracking-widest opacity-60">· {badge}</span>}
       </div>
       <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
@@ -2834,10 +2883,10 @@ const UserPickerModal = ({ open, onClose, users, onPick }) => {
                 <div className="w-9 h-9 border border-black overflow-hidden shrink-0">
                   {u.profilePicture
                     ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center font-display">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+                    : <div className="w-full h-full flex items-center justify-center font-display">{displayInitialOf(u)}</div>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-display text-sm truncate">{u.firstName || u.username} {u.lastName}</div>
+                  <div className="font-display text-sm truncate">{displayNameOf(u)}</div>
                   <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
                 </div>
               </button>
@@ -3394,6 +3443,8 @@ const EditProfileModal = ({ open, onClose, user, onUpdate }) => {
   const [firstName, setFirstName] = useState(user.firstName || "");
   const [lastName, setLastName] = useState(user.lastName || "");
   const [username, setUsername] = useState(user.username || "");
+  const [usePseudonym, setUsePseudonym] = useState(!!user.usePseudonym);
+  const [pseudonym, setPseudonym] = useState(user.pseudonym || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -3403,6 +3454,8 @@ const EditProfileModal = ({ open, onClose, user, onUpdate }) => {
       setFirstName(user.firstName || "");
       setLastName(user.lastName || "");
       setUsername(user.username || "");
+      setUsePseudonym(!!user.usePseudonym);
+      setPseudonym(user.pseudonym || "");
       setError(null);
     }
   }, [open, user]);
@@ -3415,9 +3468,21 @@ const EditProfileModal = ({ open, onClose, user, onUpdate }) => {
     try {
       const newUsername = username.trim().toLowerCase();
       if (!newUsername) { setError("Nazwa użytkownika jest wymagana"); setSaving(false); return; }
+      if (usePseudonym && !pseudonym.trim()) {
+        setError("Pseudonim jest wymagany gdy włączony");
+        setSaving(false); return;
+      }
 
-      // Spread current user record so attendance / password are preserved
-      const updated = { ...user, firstName: firstName.trim(), lastName: lastName.trim() };
+      // Spread current user record so attendance / password / avatar are preserved.
+      // We always persist firstName/lastName and pseudonym fields so the user can
+      // toggle the pseudonym flag back and forth without losing either value.
+      const updated = {
+        ...user,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        usePseudonym: !!usePseudonym,
+        pseudonym: pseudonym.trim(),
+      };
 
       if (newUsername !== user.username) {
         const existing = await storage.get("user:" + newUsername);
@@ -3440,8 +3505,20 @@ const EditProfileModal = ({ open, onClose, user, onUpdate }) => {
   return (
     <Modal open={open} onClose={onClose} title="Edytuj dane">
       <form onSubmit={submit} className="space-y-4">
-        <Input label="Imię" value={firstName} onChange={e => setFirstName(e.target.value)} />
-        <Input label="Nazwisko" value={lastName} onChange={e => setLastName(e.target.value)} />
+        {/* Pseudonim flag — when on, replaces the firstName/lastName inputs
+            with a single Pseudonim field. The firstName/lastName values are
+            retained in state regardless so toggling off restores them. */}
+        <ToggleTile checked={usePseudonym} onChange={setUsePseudonym}
+          title="Pseudonim"
+          subtitle="Wyświetlaj pseudonim zamiast imienia i nazwiska" />
+        {usePseudonym ? (
+          <Input label="Pseudonim" value={pseudonym} onChange={e => setPseudonym(e.target.value)} />
+        ) : (
+          <>
+            <Input label="Imię" value={firstName} onChange={e => setFirstName(e.target.value)} />
+            <Input label="Nazwisko" value={lastName} onChange={e => setLastName(e.target.value)} />
+          </>
+        )}
         <Input label="Nazwa użytkownika" value={username} onChange={e => setUsername(e.target.value)} autoCapitalize="none" />
         {error && (
           <div className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2">{error}</div>
@@ -3547,7 +3624,12 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
     }
   };
 
-  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "—";
+  // What to show in the read-only top section: pseudonym row when the flag is
+  // on (and a value exists), otherwise the full Imię + Nazwisko row.
+  const showsPseudonym = !!user.usePseudonym && (user.pseudonym || "").trim();
+  const displayName = showsPseudonym
+    ? user.pseudonym.trim()
+    : ([user.firstName, user.lastName].filter(Boolean).join(" ") || "—");
 
   return (
     <div className="pb-20">
@@ -3559,7 +3641,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
           <div className="w-28 h-28 border border-black overflow-hidden bg-white/40 relative">
             {user.profilePicture
               ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center font-display text-4xl font-bold">{(user.firstName || user.username)[0]?.toUpperCase()}</div>}
+              : <div className="w-full h-full flex items-center justify-center font-display text-4xl font-bold">{displayInitialOf(user)}</div>}
             {avatarSaving && (
               <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
                 <div className="spinner" />
@@ -3573,8 +3655,10 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
         <div className="border border-black">
           <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-black/20">
             <div className="min-w-0 flex-1">
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mb-1">Imię i nazwisko</div>
-              <div className="text-base truncate">{fullName}</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mb-1">
+                {showsPseudonym ? "Pseudonim" : "Imię i nazwisko"}
+              </div>
+              <div className="text-base truncate">{displayName}</div>
             </div>
             <button type="button" onClick={() => setEditOpen(true)}
               className="font-display text-xs px-3 py-1.5 border border-black hover:bg-black hover:text-white shrink-0">
@@ -3598,15 +3682,9 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
         {/* Animated background preference (device-local) */}
         <div className="border-t border-black pt-5 space-y-3">
           <div className="font-mono text-xs uppercase tracking-widest opacity-70">Wygląd</div>
-          <div className="flex items-center justify-between gap-3 py-1">
-            <div className="min-w-0">
-              <div className="text-sm">Animowane tło</div>
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-0.5">
-                {animated ? "Włączone" : "Wyłączone"}
-              </div>
-            </div>
-            <Switch checked={animated} onChange={onToggleAnimated} label="Animowane tło" />
-          </div>
+          <ToggleTile checked={animated} onChange={onToggleAnimated}
+            title="Animowane tło"
+            subtitle={animated ? "Włączone" : "Wyłączone"} />
           <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
             Ustawienie zapisywane na tym urządzeniu.
           </p>
@@ -3632,8 +3710,8 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
 // ============================================================
 const GoscieView = ({ user, users }) => {
   const sorted = [...users].sort((a, b) => {
-    const an = (a.firstName || a.username).toLowerCase();
-    const bn = (b.firstName || b.username).toLowerCase();
+    const an = displayNameOf(a).toLowerCase();
+    const bn = displayNameOf(b).toLowerCase();
     return an.localeCompare(bn);
   });
   return (
@@ -3645,10 +3723,10 @@ const GoscieView = ({ user, users }) => {
             <div className="w-12 h-12 border border-black overflow-hidden shrink-0 bg-white">
               {u.profilePicture
                 ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center font-display text-lg font-bold">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+                : <div className="w-full h-full flex items-center justify-center font-display text-lg font-bold">{displayInitialOf(u)}</div>}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-display font-bold truncate">{u.firstName || u.username} {u.lastName}</div>
+              <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
               <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
             </div>
           </div>
@@ -3769,28 +3847,14 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
     <div className="pb-20">
       <PageHeader title="Admin" subtitle="Zarządzanie aplikacją" />
       <div className="px-5 space-y-6">
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="font-display font-bold uppercase mb-1">Lista gości</div>
-              <div className="font-mono text-xs uppercase tracking-widest opacity-70">
-                {guestListVisible ? "Widoczna dla wszystkich" : "Widoczna tylko dla adminów"}
-              </div>
-            </div>
-            <Switch checked={guestListVisible} onChange={onToggleGuestList} label="Lista gości" />
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="font-display font-bold uppercase mb-1">Lista stacji kosmicznych</div>
-              <div className="font-mono text-xs uppercase tracking-widest opacity-70">
-                {stacjeListVisible ? "Widoczna dla wszystkich" : "Ukryta — widoczny tylko opis"}
-              </div>
-            </div>
-            <Switch checked={stacjeListVisible} onChange={onToggleStacjeList} label="Lista stacji kosmicznych" />
-          </div>
-        </Card>
+        <ToggleTile size="lg"
+          checked={guestListVisible} onChange={onToggleGuestList}
+          title="Lista gości"
+          subtitle={guestListVisible ? "Widoczna dla wszystkich" : "Widoczna tylko dla adminów"} />
+        <ToggleTile size="lg"
+          checked={stacjeListVisible} onChange={onToggleStacjeList}
+          title="Lista stacji kosmicznych"
+          subtitle={stacjeListVisible ? "Widoczna dla wszystkich" : "Ukryta — widoczny tylko opis"} />
         <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -3803,10 +3867,10 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
                 <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
                   {u.profilePicture
                     ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center font-display font-bold">{(u.firstName || u.username)[0]?.toUpperCase()}</div>}
+                    : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(u)}</div>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-display font-bold truncate">{u.firstName || u.username} {u.lastName}</div>
+                  <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
                   <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => { setEditing(u); setModalOpen(true); }}>Edytuj</Button>
@@ -4203,7 +4267,8 @@ export default function App() {
         </main>
         <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
           currentView={view} onNavigate={navigate} user={user}
-          guestListVisible={guestListVisible} onLogout={onLogout} />
+          guestListVisible={guestListVisible} onLogout={onLogout}
+          homeTilesOverrides={homeTilesOverrides} />
       </div>
       <ErrorToast />
     </>

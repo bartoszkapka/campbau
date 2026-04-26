@@ -40,6 +40,20 @@ const GlobalStyles = () => (
        saturated colors. translate3d in keyframes promotes blobs
        to their own compositor layers so the animation runs on the
        GPU rather than recomposing every frame.
+
+       Mobile/iOS Safari notes:
+         • Blur is reduced from 70px → 32px on mobile. Large blur radii
+           dominate frame time on mobile GPUs, especially as the page
+           runs and Safari starts evicting layers under memory pressure.
+         • Animations run at half speed on mobile (durations doubled).
+           Combined with the smaller blur, this keeps GPU work per frame
+           low enough to avoid the after-a-while stutter we were seeing.
+         • Animations pause entirely when the document is hidden (tab
+           backgrounded, app switched, lock screen) via .bg-stage-paused.
+           This prevents iOS from accumulating dropped frames in the
+           animation timeline while the page isn't visible.
+         • backface-visibility: hidden hints the layer should stay
+           uploaded as a texture rather than rasterized per frame.
        ========================================================== */
     .bg-stage {
       position: fixed;
@@ -53,9 +67,11 @@ const GlobalStyles = () => (
       border-radius: 50%;
       filter: blur(70px);
       opacity: 0.85;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
     }
     @media (max-width: 768px) {
-      .blob { filter: blur(40px); opacity: 1; }
+      .blob { filter: blur(32px); opacity: 0.95; }
     }
     .blob-1 { width: 70vmax; height: 70vmax; background: #7ef7ff; top: -30vmax; left: -25vmax; animation: floatA 4.8s ease-in-out infinite alternate; }
     .blob-2 { width: 60vmax; height: 60vmax; background: #ffc2ce; top: -20vmax; right: -25vmax; animation: floatB 5.6s ease-in-out infinite alternate; }
@@ -63,6 +79,18 @@ const GlobalStyles = () => (
     .blob-4 { width: 55vmax; height: 55vmax; background: #e872f5; bottom: -15vmax; right: -20vmax; animation: floatD 5.2s ease-in-out infinite alternate; }
     .blob-5 { width: 50vmax; height: 50vmax; background: #ffd0a0; top: 25vmax; left: 30vmax; animation: floatE 6s ease-in-out infinite alternate; }
     .blob-6 { width: 45vmax; height: 45vmax; background: #b5ffd6; top: -10vmax; left: 40vmax; animation: floatF 4.8s ease-in-out infinite alternate; }
+
+    /* Mobile: double durations to halve GPU work over time. The motion is
+       still continuous but each frame's transform delta is smaller, so the
+       compositor has less to do per frame. */
+    @media (max-width: 768px) {
+      .blob-1 { animation-duration: 9.6s; }
+      .blob-2 { animation-duration: 11.2s; }
+      .blob-3 { animation-duration: 8.8s; }
+      .blob-4 { animation-duration: 10.4s; }
+      .blob-5 { animation-duration: 12s; }
+      .blob-6 { animation-duration: 9.6s; }
+    }
 
     @keyframes floatA {
       0%   { transform: translate3d(0, 0, 0) scale(1); }
@@ -93,6 +121,11 @@ const GlobalStyles = () => (
       .blob { animation: none !important; }
     }
     .bg-stage-static .blob { animation: none !important; }
+    /* When the document is backgrounded we pause the animation entirely.
+       This avoids a known iOS Safari issue where long-running CSS animations
+       accumulate dropped frames while the page isn't visible, then visibly
+       stutter when the user returns. */
+    .bg-stage-paused .blob { animation-play-state: paused !important; }
 
     /* ==========================================================
        FORCE-DARK — used only by the drawer panel. Inverts colors
@@ -243,17 +276,39 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-// Animated background wrapper — 5 floating blurred blobs
-const AnimatedBackground = ({ animated = true }) => (
-  <div className={`bg-stage ${animated ? "" : "bg-stage-static"}`} aria-hidden>
-    <div className="blob blob-1" />
-    <div className="blob blob-2" />
-    <div className="blob blob-3" />
-    <div className="blob blob-4" />
-    <div className="blob blob-5" />
-    <div className="blob blob-6" />
-  </div>
-);
+// Animated background — six floating blurred blobs.
+// Listens to document.visibilitychange and pauses the CSS animations when
+// the document is hidden (tab backgrounded, app switched, lock screen on
+// iOS). This sidesteps an iOS Safari issue where long-running CSS animations
+// progressively drop frames while the page isn't visible, causing visible
+// stutter when the user returns. Resuming on visibilitychange means the
+// animation restarts at full smoothness rather than catching up from a
+// degraded state.
+const AnimatedBackground = ({ animated = true }) => {
+  const [hidden, setHidden] = useState(() =>
+    typeof document !== "undefined" && document.visibilityState === "hidden"
+  );
+  useEffect(() => {
+    const onVis = () => setHidden(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  const cls = [
+    "bg-stage",
+    !animated && "bg-stage-static",
+    hidden && "bg-stage-paused",
+  ].filter(Boolean).join(" ");
+  return (
+    <div className={cls} aria-hidden>
+      <div className="blob blob-1" />
+      <div className="blob blob-2" />
+      <div className="blob blob-3" />
+      <div className="blob blob-4" />
+      <div className="blob blob-5" />
+      <div className="blob blob-6" />
+    </div>
+  );
+};
 
 // ============================================================
 // LOGO
@@ -967,7 +1022,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
 const PageHeader = ({ title, subtitle, action }) => (
   <div className="px-5 pt-8 pb-6">
     <div className="flex items-start justify-between gap-4 mb-2">
-      <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none">{title}</h1>
+      <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold uppercase leading-[0.95] break-words">{title}</h1>
       {action}
     </div>
     {subtitle && <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-3">{subtitle}</p>}
@@ -3089,11 +3144,21 @@ const FestiwalView = ({ user }) => {
               </div>
             </div>
             <div className="px-5 space-y-16 pt-6">
-              {sections.map((s, idx) => (
+              {sections.map((s, idx) => {
+                const photoLeft = s.photo && s.photoSide === "left";
+                return (
                 <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
+                  {/* Header row: emoji square stacked above title; admin
+                      controls on the right. The emoji square is a 95% black
+                      tile (matching globals) with the section's emoji
+                      centered, white-on-black to read as a clear marker. */}
                   <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="text-4xl emoji-mono">{s.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      {s.icon && (
+                        <div className="w-16 h-16 bg-black text-white flex items-center justify-center mb-3">
+                          <span className="text-4xl leading-none emoji-mono">{s.icon}</span>
+                        </div>
+                      )}
                       <h2 className="font-display text-3xl font-bold uppercase leading-tight">{s.title}</h2>
                     </div>
                     {isAdmin && (
@@ -3107,10 +3172,25 @@ const FestiwalView = ({ user }) => {
                       </div>
                     )}
                   </div>
-                  {s.photo && <img src={s.photo} alt="" className="w-full max-h-80 object-cover border border-black mb-4" />}
-                  {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
+                  {/* Body: at lg+, photo and content sit side-by-side with
+                      the photo on the side admin chose. Below lg, photo
+                      stacks above content (mobile-first). flex-row-reverse
+                      handles the "left" placement without duplicating markup. */}
+                  {s.photo ? (
+                    <div className={`flex flex-col ${photoLeft ? "lg:flex-row-reverse" : "lg:flex-row"} lg:items-start gap-6`}>
+                      <div className="lg:flex-1 min-w-0">
+                        {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
+                      </div>
+                      <div className="lg:w-1/2 lg:shrink-0">
+                        <img src={s.photo} alt="" className="w-full max-h-80 lg:max-h-none object-cover border border-black" />
+                      </div>
+                    </div>
+                  ) : (
+                    s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>
+                  )}
                 </section>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -3121,36 +3201,51 @@ const FestiwalView = ({ user }) => {
 };
 
 const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
-  const [form, setForm] = useState({ icon: "✨", title: "", content: "", photo: null });
+  const [form, setForm] = useState({ icon: "✨", title: "", content: "", photo: null, photoSide: "right" });
   useEffect(() => {
     if (open) setForm(editing ? {
       icon: editing.icon || "✧", title: editing.title || "",
-      content: editing.content || "", photo: editing.photo || null
-    } : { icon: "✨", title: "", content: "", photo: null });
+      content: editing.content || "", photo: editing.photo || null,
+      photoSide: editing.photoSide === "left" ? "left" : "right",
+    } : { icon: "✨", title: "", content: "", photo: null, photoSide: "right" });
   }, [open, editing]);
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const submit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    onSave({ icon: form.icon, title: form.title.trim(), content: form.content, photo: form.photo });
+    onSave({
+      icon: form.icon, title: form.title.trim(), content: form.content,
+      photo: form.photo, photoSide: form.photoSide,
+    });
   };
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Edytuj sekcję" : "Nowa sekcja"}>
       <form onSubmit={submit} className="space-y-4">
-        <div>
-          <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Emoji</span>
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 border border-black flex items-center justify-center text-3xl emoji-mono shrink-0">
-              {form.icon || "·"}
-            </div>
-            <Input className="flex-1" placeholder="Wpisz emoji" value={form.icon}
-              onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
-          </div>
-        </div>
+        <Input label="Emoji" placeholder="Wpisz emoji" value={form.icon}
+          onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Treść (rich text)" value={form.content} onChange={e => update("content", e.target.value)} rows={7} />
         <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
         <ImageUpload label="Zdjęcie" value={form.photo} onChange={v => update("photo", v)} />
+        {form.photo && (
+          <div>
+            <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Strona zdjęcia (na większych ekranach)</span>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "left", label: "Po lewej" },
+                { value: "right", label: "Po prawej" },
+              ].map(opt => {
+                const selected = form.photoSide === opt.value;
+                return (
+                  <button key={opt.value} type="button" onClick={() => update("photoSide", opt.value)}
+                    className={`border px-3 py-2 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                    <div className="font-display text-sm">{opt.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -3273,6 +3368,15 @@ const MiejsceView = ({ user, onUpdate }) => {
   const [data, setData] = useState({ photos: [], address: "", mapQuery: "", contact: "", lat: null, lng: null, startDate: "", endDate: "" });
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  // Lightbox: when set to a number (photo index), the lightbox modal is open
+  // and showing data.photos[lightboxIdx]. null = closed.
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    const onKey = (e) => { if (e.key === "Escape") setLightboxIdx(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxIdx]);
   const isAdmin = user.role === "admin";
 
   const load = async () => {
@@ -3336,12 +3440,17 @@ const MiejsceView = ({ user, onUpdate }) => {
               <AttendanceCalendar user={user} startDate={data.startDate} endDate={data.endDate} onUpdate={onUpdate} />
             )}
             {data.photos.length > 0 && (
-              <div className="grid grid-cols-2 gap-3">
-                {data.photos.map((p, i) => (
-                  <div key={i} className="border border-black aspect-square overflow-hidden">
-                    <img src={p} alt="" className="w-full h-full object-cover" />
-                  </div>
-                ))}
+              <div className="-mx-5 px-5 overflow-x-auto no-scrollbar"
+                style={{ touchAction: "pan-x pan-y" }}>
+                <div className="flex gap-3 w-max pb-1">
+                  {data.photos.map((p, i) => (
+                    <button key={i} type="button" onClick={() => setLightboxIdx(i)}
+                      className="border border-black w-64 h-64 overflow-hidden shrink-0 block bg-black/5"
+                      aria-label="Powiększ zdjęcie">
+                      <img src={p} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {data.address && (
@@ -3373,6 +3482,20 @@ const MiejsceView = ({ user, onUpdate }) => {
           </div>
         )}
       <MiejsceEditModal open={editOpen} onClose={() => setEditOpen(false)} data={data} onSave={save} />
+      {/* Lightbox — full-viewport black backdrop with the selected photo
+          fitted via object-contain so portrait/landscape both display fully.
+          Tapping anywhere (including the photo) or pressing Esc closes. */}
+      {lightboxIdx !== null && data.photos[lightboxIdx] && (
+        <div className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4"
+          onClick={() => setLightboxIdx(null)}
+          role="dialog" aria-modal="true">
+          <img src={data.photos[lightboxIdx]} alt=""
+            className="max-w-full max-h-full object-contain" />
+          <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
+            className="absolute top-4 right-4 w-10 h-10 border border-white text-white text-2xl flex items-center justify-center bg-black/50"
+            aria-label="Zamknij">✕</button>
+        </div>
+      )}
     </div>
   );
 };

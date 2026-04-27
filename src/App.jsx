@@ -51,6 +51,17 @@ const GlobalStyles = () => (
       font-style: italic;
       font-display: swap;
     }
+    /* Separate family — used for the per-character random-font effect on
+       page headings. Pairs visually with Verlag Black: same heavy ink, but
+       narrow + tall instead of square. Mixing them per letter gives the
+       headings a kinetic, varied feel. */
+    @font-face {
+      font-family: 'Verlag Compressed';
+      src: url('/fonts/verlag-compressed-bold.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body, #root { margin: 0; padding: 0; min-height: 100%; }
@@ -71,6 +82,23 @@ const GlobalStyles = () => (
       font-family: 'Verlag', -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 900;
       text-transform: uppercase;
+    }
+    /* Per-character mix companion to .font-display. Verlag Compressed Bold
+       has the same visual weight as Verlag Black but a narrower, taller
+       proportion — alternating between them at the letter level produces
+       the heading's "kinetic" look. Width-narrow letters sit next to
+       width-square letters. Same color, same weight, different shape. */
+    .font-compressed {
+      font-family: 'Verlag Compressed', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    /* Used by DisplayHeading for the per-character random-font effect.
+       Switches a single character to Verlag Compressed Bold while keeping
+       its surrounding letters in Verlag Black. */
+    .font-compressed {
+      font-family: 'Verlag Compressed', 'Verlag', sans-serif;
+      font-weight: 700;
     }
     /* Labels / metadata — Verlag Bold, tracked. */
     .font-mono {
@@ -1158,10 +1186,44 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
 // ============================================================
 // PAGE HEADER
 // ============================================================
+
+// Renders a string as a heading where each character is randomly assigned
+// either Verlag Black (square, heavy) or Verlag Compressed Bold (narrow,
+// tall). Spaces are passed through unwrapped to avoid spacing artifacts.
+//
+// `as` lets the parent choose the wrapping element — "h1" for top-level
+// page headings, "span" when the random-font text needs to sit inline
+// alongside something else (e.g. an emoji prefix).
+//
+// useMemo keys on the text so the random pattern is stable for as long as
+// the heading is the same — the user navigating to a different page gets
+// a fresh roll, but no jitter while sitting on a page.
+const DisplayHeading = ({ children, className = "", as: Tag = "h1" }) => {
+  const text = typeof children === "string" ? children : String(children ?? "");
+  const segments = useMemo(() => {
+    return Array.from(text).map((ch) => ({
+      ch,
+      compressed: ch.trim() === "" ? null : Math.random() < 0.5,
+    }));
+  }, [text]);
+  return (
+    <Tag className={className}>
+      {segments.map((s, i) => {
+        if (s.compressed === null) return s.ch;
+        return (
+          <span key={i} className={s.compressed ? "font-compressed" : ""}>
+            {s.ch}
+          </span>
+        );
+      })}
+    </Tag>
+  );
+};
+
 const PageHeader = ({ title, subtitle, action }) => (
   <div className="px-5 pt-16 pb-6">
     <div className="flex items-start justify-between gap-4 mb-2">
-      <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] break-words">{title}</h1>
+      <DisplayHeading className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] break-words">{title}</DisplayHeading>
       {action}
     </div>
     {subtitle && <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-3">{subtitle}</p>}
@@ -1684,7 +1746,7 @@ const isAttendanceComplete = (user, startDate, endDate) => {
   return true;
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {} }) => {
+const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "" }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
     if (t.conditional === "guests") return user.role === "admin" || guestListVisible;
@@ -1705,7 +1767,27 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
   const locationName = miejsce?.mapQuery || "Grójec, Polska";
   const startDate = miejsce?.startDate || "";
   const endDate = miejsce?.endDate || "";
-  const allMarked = miejsceLoaded && isAttendanceComplete(user, startDate, endDate);
+
+  // "Nothing marked" — none of the festival days has any attendance value
+  // set. This is the case where we surface the deadline notice nudging the
+  // user to confirm. As soon as they mark even one day (yes/no/maybe),
+  // the notice goes away — partial confirmation counts.
+  const nothingMarked = (() => {
+    if (!miejsceLoaded || !startDate || !endDate) return false;
+    const att = user.attendance || {};
+    const start = new Date(startDate + "T12:00");
+    const end = new Date(endDate + "T12:00");
+    if (isNaN(start) || isNaN(end) || start > end) return false;
+    const cur = new Date(start);
+    let safety = 0;
+    while (cur <= end && safety < 100) {
+      const iso = cur.toISOString().slice(0, 10);
+      if (att[iso]) return false; // any value = at least partial confirmation
+      cur.setDate(cur.getDate() + 1);
+      safety++;
+    }
+    return true;
+  })();
 
   return (
     <div className="pb-20">
@@ -1719,17 +1801,32 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
             {miejsceLoaded && startDate && (
               <CountdownWidget startDate={startDate} endDate={endDate} />
             )}
-            {/* If the user has marked every festival day, show the full
-                calendar widget so they can see and edit at a glance.
-                Otherwise nudge them to fill it in via the prompt. */}
+            {/* The attendance calendar is always shown (when festival dates
+                are configured). When nothing has been marked, a notice sits
+                above it nudging the user to confirm before the deadline.
+                Marking even one day removes the notice — partial counts as
+                confirmation. */}
             {miejsceLoaded && startDate && endDate && (
-              allMarked ? (
+              <>
+                {nothingMarked && (
+                  <Card className="p-5 mb-4">
+                    <div className="font-display font-bold uppercase mb-2">Potwierdź obecność</div>
+                    <p className="text-sm">
+                      Daj znać, czy będziesz na festiwalu. Wystarczy potwierdzić, że <strong>w ogóle przyjedziesz</strong> lub że <strong>nie dasz rady</strong>.
+                      Konkretne dni (i to, czy zostajesz na cały weekend, czy tylko na część) możesz dograć później —
+                      wystarczy że zaznaczysz cokolwiek poniżej, a komunikat zniknie.
+                    </p>
+                    {attendanceDeadline && (
+                      <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-3">
+                        Termin potwierdzenia: {formatDate(attendanceDeadline)}
+                      </p>
+                    )}
+                  </Card>
+                )}
                 <div className="mb-6">
                   <AttendanceCalendar user={user} startDate={startDate} endDate={endDate} onUpdate={onUpdate} />
                 </div>
-              ) : (
-                <AttendancePrompt user={user} startDate={startDate} endDate={endDate} onNavigate={onNavigate} />
-              )
+              </>
             )}
             {miejsceLoaded && (
               <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
@@ -2219,7 +2316,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
           {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{dateLine}</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
-          {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}{item.title}
+          {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
         {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
       </div>
@@ -2878,7 +2975,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
           {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
-          {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}{item.title}
+          {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
         {item.description && <div className="prose-simple text-base mb-10">{renderRichText(item.description)}</div>}
       </div>
@@ -3325,7 +3422,7 @@ const FestiwalView = ({ user }) => {
                         <span className="text-4xl leading-none emoji-mono">{s.icon}</span>
                       </div>
                     )}
-                    <h2 className="font-display text-3xl font-bold uppercase leading-tight mb-4">{s.title}</h2>
+                    <DisplayHeading as="h2" className="font-display text-3xl font-bold uppercase leading-tight mb-4">{s.title}</DisplayHeading>
                     {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
                   </div>
                 );
@@ -4220,7 +4317,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   );
 };
 
-const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, homeTilesOverrides = {}, onSaveHomeTileIcon }) => {
+const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -4281,6 +4378,21 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
           checked={!!attendanceVisible} onChange={onToggleAttendance}
           title="Obecność gości"
           subtitle={attendanceVisible ? "Widoczna dla wszystkich gości" : "Widoczna tylko dla adminów"} />
+        <Card className="p-5">
+          <div className="font-display font-bold uppercase mb-1">Termin potwierdzenia obecności</div>
+          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
+            Data, do której goście powinni potwierdzić obecność. Zostawienie pustego pola wyłącza komunikat na stronie głównej.
+          </div>
+          <div className="flex items-center gap-3">
+            <input type="date"
+              value={attendanceDeadline || ""}
+              onChange={e => onSaveAttendanceDeadline(e.target.value)}
+              className="border border-black px-3 py-2 bg-white" />
+            {attendanceDeadline && (
+              <Button variant="outline" size="sm" onClick={() => onSaveAttendanceDeadline("")}>Wyczyść</Button>
+            )}
+          </div>
+        </Card>
         <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -4368,6 +4480,10 @@ export default function App() {
   // Whether non-admin guests can see other guests' attendance. Default false
   // (privacy-respecting); admin can opt to share it via the admin page.
   const [attendanceVisible, setAttendanceVisible] = useState(false);
+  // ISO date string (YYYY-MM-DD) by which guests should mark their
+  // attendance. null/empty means no deadline set. Stored in `settings`
+  // alongside the other admin-controlled flags.
+  const [attendanceDeadline, setAttendanceDeadline] = useState("");
   // Per-tile emoji overrides for the home page. Keyed by tile id (e.g.
   // "wydarzenia"), value is the emoji string. Missing keys fall back to the
   // default in HOME_TILES. Persisted at storage key `home_tiles`.
@@ -4454,6 +4570,7 @@ export default function App() {
           setGuestListVisible(!!settings?.guestListVisible);
           setStacjeListVisible(settings?.stacjeListVisible !== false);
           setAttendanceVisible(!!settings?.attendanceVisible);
+          setAttendanceDeadline(settings?.attendanceDeadline || "");
           setHomeTilesOverrides(homeTiles || {});
           setInitialized(true);
           return;
@@ -4480,6 +4597,7 @@ export default function App() {
           setGuestListVisible(!!settings.guestListVisible);
           setStacjeListVisible(settings.stacjeListVisible !== false);
           setAttendanceVisible(!!settings.attendanceVisible);
+          setAttendanceDeadline(settings.attendanceDeadline || "");
         }
         if (miejsce && (typeof miejsce.lat !== "number" || typeof miejsce.lng !== "number")) {
           writes.push(storage.set("miejsce", { ...miejsce, lat: 51.8667, lng: 20.8667 }));
@@ -4595,6 +4713,7 @@ export default function App() {
               setGuestListVisible(!!s?.guestListVisible);
               setStacjeListVisible(s?.stacjeListVisible !== false);
               setAttendanceVisible(!!s?.attendanceVisible);
+              setAttendanceDeadline(s?.attendanceDeadline || "");
               setHomeTilesOverrides(homeTiles || {});
             }
             // Warm the cache for the rest of the app
@@ -4629,6 +4748,7 @@ export default function App() {
     setGuestListVisible(!!s?.guestListVisible);
     setStacjeListVisible(s?.stacjeListVisible !== false);
     setAttendanceVisible(!!s?.attendanceVisible);
+    setAttendanceDeadline(s?.attendanceDeadline || "");
     setHomeTilesOverrides(homeTiles || {});
     // Warm the cache so navigation feels instant
     storage.prefetchAll("user:");
@@ -4670,6 +4790,22 @@ export default function App() {
     const current = (await storage.get("settings")) || {};
     await storage.set("settings", { ...current, attendanceVisible: next });
     setAttendanceVisible(next);
+  };
+
+  // Persist the attendance confirmation deadline. Empty string clears it.
+  // Optimistic — updates state first, rolls back on error.
+  const onSaveAttendanceDeadline = async (iso) => {
+    const next = (iso || "").trim();
+    const prev = attendanceDeadline;
+    setAttendanceDeadline(next);
+    try {
+      const current = (await storage.get("settings")) || {};
+      await storage.set("settings", { ...current, attendanceDeadline: next || null });
+    } catch (err) {
+      setAttendanceDeadline(prev);
+      console.warn("Failed to save attendance deadline:", err);
+      window.dispatchEvent(new Event("storage:error"));
+    }
   };
 
   // Save a single home-tile emoji override. Empty string clears the override
@@ -4768,7 +4904,7 @@ export default function App() {
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={
-              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides} />
+              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides} attendanceDeadline={attendanceDeadline} />
             } />
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />
@@ -4795,6 +4931,7 @@ export default function App() {
                     guestListVisible={guestListVisible} onToggleGuestList={onToggleGuestList}
                     stacjeListVisible={stacjeListVisible} onToggleStacjeList={onToggleStacjeList}
                     attendanceVisible={attendanceVisible} onToggleAttendance={onToggleAttendance}
+                    attendanceDeadline={attendanceDeadline} onSaveAttendanceDeadline={onSaveAttendanceDeadline}
                     homeTilesOverrides={homeTilesOverrides} onSaveHomeTileIcon={onSaveHomeTileIcon} />
                 : <EmptyState message="Brak dostępu" />
             } />

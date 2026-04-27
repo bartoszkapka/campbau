@@ -7,10 +7,55 @@ import { storage } from "./storage.js";
 // ============================================================
 const GlobalStyles = () => (
   <style>{`
+    /* ==========================================================
+       VERLAG — self-hosted webfonts
+       Subset to Latin + Latin Extended (covers Polish), converted
+       to woff2. font-display: swap so system fallback shows
+       immediately and Verlag swaps in once loaded (no FOIT).
+       Single 'Verlag' family with weight/style variants — let the
+       browser pick the right face based on font-weight / font-style
+       rather than naming variants in the font-family stack.
+       ========================================================== */
+    @font-face {
+      font-family: 'Verlag';
+      src: url('/fonts/verlag-book.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Verlag';
+      src: url('/fonts/verlag-light-italic.woff2') format('woff2');
+      font-weight: 400;
+      font-style: italic;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Verlag';
+      src: url('/fonts/verlag-bold.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Verlag';
+      src: url('/fonts/verlag-black.woff2') format('woff2');
+      font-weight: 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Verlag';
+      src: url('/fonts/verlag-black-italic.woff2') format('woff2');
+      font-weight: 900;
+      font-style: italic;
+      font-display: swap;
+    }
+
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body, #root { margin: 0; padding: 0; min-height: 100%; }
     body {
-      font-family: 'Verlag', 'Verlag A', 'Verlag B', 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Verlag', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       font-weight: 400;
       color: #0d0d0d;
       background: #f2ecff;
@@ -21,15 +66,15 @@ const GlobalStyles = () => (
        so internal horizontal scroll containers (sunset widget tiles) still work on iOS. */
     .app-shell { overflow-x: clip; }
 
-    /* Headings: Verlag Black, uppercase */
+    /* Headings: Verlag Black (weight 900), uppercase. */
     .font-display {
-      font-family: 'Verlag Black', 'Verlag A', 'Verlag B', 'Verlag', 'Montserrat', sans-serif;
+      font-family: 'Verlag', -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 900;
       text-transform: uppercase;
     }
-    /* Labels / metadata — same family, bolder + tracked */
+    /* Labels / metadata — Verlag Bold, tracked. */
     .font-mono {
-      font-family: 'Verlag', 'Verlag A', 'Verlag B', 'Montserrat', sans-serif;
+      font-family: 'Verlag', -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 700;
       letter-spacing: 0.12em;
     }
@@ -449,6 +494,34 @@ const useStickyDetect = (topOffset = 80) => {
   return [stuck, setRef];
 };
 
+// Re-run a view's load() function whenever the storage layer announces that
+// data under a given prefix was refreshed. The App component runs a periodic
+// revalidate + refetch loop and emits storage:refresh when fresh data lands;
+// individual views opt in to live updates by passing their prefix and load
+// function here. Without this, each view shows whatever it loaded on mount
+// until the user navigates away and back.
+//
+// Pass an array of prefixes to listen for any of them ("user:" listens to
+// both per-key get cache hits and prefix-level getAll cache hits).
+const useStorageRefresh = (prefixes, load) => {
+  useEffect(() => {
+    if (!load) return;
+    const list = Array.isArray(prefixes) ? prefixes : [prefixes];
+    const onRefresh = (e) => {
+      const ck = e?.detail?.cacheKey || "";
+      // cacheKey shape: "get:<key>", "list:<prefix>", or "getAll:<prefix>"
+      const matches = list.some(p =>
+        ck.startsWith("get:" + p) ||
+        ck.startsWith("getAll:" + p) ||
+        ck.startsWith("list:" + p)
+      );
+      if (matches) load();
+    };
+    window.addEventListener("storage:refresh", onRefresh);
+    return () => window.removeEventListener("storage:refresh", onRefresh);
+  }, [load, JSON.stringify(prefixes)]);
+};
+
 const resizeImage = (file, maxSize = 1000) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -488,7 +561,11 @@ const formatDate = (date, time) => {
 // ============================================================
 const seedDemoData = async () => {
   try {
-    const flag = await storage.get("seeded:v1");
+    // Strict guard — if reading the seed flag fails for any reason, abort.
+    // Better to skip seeding (and maybe end up with no demo data on a brand
+    // new install during a network blip) than to risk re-seeding on top of
+    // a real install and clobbering live records.
+    const flag = await storage.getStrict("seeded:v1");
     if (flag) return;
 
     // Sample users
@@ -499,7 +576,11 @@ const seedDemoData = async () => {
       { username: "kasia", firstName: "Kasia", lastName: "Lewandowska" },
     ];
     for (const u of sampleUsers) {
-      const exists = await storage.get("user:" + u.username);
+      // Strict — if the read fails we skip rather than overwriting an
+      // existing user with a default record.
+      let exists;
+      try { exists = await storage.getStrict("user:" + u.username); }
+      catch { continue; }
       if (!exists) {
         await storage.set("user:" + u.username, {
           id: u.username, username: u.username, password: "kosmos",
@@ -550,7 +631,13 @@ const seedDemoData = async () => {
     }
 
     // Miejsce
-    const existingMiejsce = await storage.get("miejsce");
+    let existingMiejsce;
+    try { existingMiejsce = await storage.getStrict("miejsce"); }
+    catch (err) {
+      // Failed to check — skip the rest of seeding for safety
+      console.warn("Seed: miejsce check failed, aborting", err);
+      return;
+    }
     if (!existingMiejsce) {
       await storage.set("miejsce", {
         photos: [],
@@ -819,18 +906,34 @@ const LoginView = ({ onLogin, initError }) => {
         return;
       }
 
+      // Strict get so we can tell "no user record" apart from "fetch
+      // failed". A permissive get returning null could otherwise let the
+      // bau-fallback below overwrite a live admin record with defaults.
       let u = null;
-      try { u = await storage.get("user:" + usernameLower); } catch (e) { console.warn("storage.get failed", e); }
+      let lookupFailed = false;
+      try {
+        u = await storage.getStrict("user:" + usernameLower);
+      } catch (e) {
+        console.warn("Login lookup failed", e);
+        lookupFailed = true;
+      }
 
-      // Fallback bootstrap: if logging in as bau/kambau and admin is missing (or storage is unavailable),
-      // proceed anyway and attempt to persist.
-      if (!u && usernameLower === "bau" && pwd === "kambau") {
+      // Fallback bootstrap: if logging in as bau/kambau and the admin
+      // record is genuinely missing, create it. We refuse to do this when
+      // the lookup *failed* — that would risk wiping a live profile during
+      // a transient Upstash outage. The user gets a clear error instead
+      // and can retry.
+      if (!u && !lookupFailed && usernameLower === "bau" && pwd === "kambau") {
         const adminUser = {
           id: "bau", username: "bau", password: "kambau",
           firstName: "", lastName: "", profilePicture: null, role: "admin"
         };
         try { await storage.set("user:bau", adminUser); } catch (e) { console.warn("storage.set failed", e); }
         u = adminUser;
+      } else if (lookupFailed) {
+        setLoading(false);
+        setError("Problem z połączeniem. Spróbuj ponownie.");
+        return;
       }
 
       setLoading(false);
@@ -1694,6 +1797,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
     setLoading(false);
   };
   useEffect(() => { load(); }, [user.id]);
+  useStorageRefresh(["stacja:", "stacje_intro"], load);
 
   const save = async (data) => {
     const item = { id: uid(), owners: [user.id], createdBy: user.id, ...data };
@@ -1754,11 +1858,22 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
                 // Hidden stacje are a real secret — only the owners see content.
                 // Admins are NOT exempt (unlike the "Organizator i Bau" visibility,
                 // where admins do see content). For everyone else we render a
-                // 🔒 mystery card with no details exposed.
+                // 🔒 mystery card with no details exposed. Admin still gets a
+                // Usuń button on the mystery card so they can clean up
+                // abandoned/inappropriate records without seeing contents.
                 const mystery = it.visibility === "hidden" && !isOwner;
                 return (
                   <StacjaCard key={it.id} item={it} users={users} mystery={mystery}
-                    onClick={() => onOpenDetail(it.id)} />
+                    onClick={() => onOpenDetail(it.id)}
+                    onAdminDelete={mystery && isAdmin ? async (id) => {
+                      try {
+                        await storage.delete("stacja:" + id);
+                        load();
+                      } catch (err) {
+                        console.warn("Failed to delete stacja:", err);
+                        window.dispatchEvent(new Event("storage:error"));
+                      }
+                    } : undefined} />
                 );
               })}
             </div>
@@ -1794,18 +1909,32 @@ const visibilityLabel = (v) => ({
   host: "Organizator i Bau",
 }[v] || v);
 
-const StacjaCard = ({ item, users, mystery, onClick }) => {
+const StacjaCard = ({ item, users, mystery, onClick, onAdminDelete }) => {
   // Mystery card uses the exact same horizontal structure as a regular card —
   // 🔒 emoji on the left, "???" title and a generic description on the right.
+  // Admin gets a Usuń button on hidden stacje they can't see — they don't
+  // need to read the contents to clean up abandoned/inappropriate records,
+  // but the privacy contract still holds (no peeking at title/owners/etc.).
   if (mystery) {
     return (
       <Card onClick={onClick} className="overflow-hidden flex">
         <div className="w-28 sm:w-32 shrink-0 border-r border-black flex items-center justify-center bg-black/5">
           <span className="text-5xl sm:text-6xl emoji-mono">🔒</span>
         </div>
-        <div className="p-4 flex-1 min-w-0 flex flex-col justify-center">
-          <h3 className="font-display text-lg mb-1 leading-tight">???</h3>
-          <p className="text-sm opacity-80">Stacja kosmiczna ukryta</p>
+        <div className="p-4 flex-1 min-w-0 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-display text-lg mb-1 leading-tight">???</h3>
+            <p className="text-sm opacity-80">Stacja kosmiczna ukryta</p>
+          </div>
+          {onAdminDelete && (
+            <Button variant="outline" size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm("Usunąć tę ukrytą stację? Nie zobaczysz jej zawartości.")) {
+                  onAdminDelete(item.id);
+                }
+              }}>Usuń</Button>
+          )}
         </div>
       </Card>
     );
@@ -1990,6 +2119,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
     setLoading(false);
   };
   useEffect(() => { load(); }, [stacjaId]);
+  useStorageRefresh(["stacja:" + stacjaId], load);
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner" /></div>;
   if (!item) return (
@@ -2184,6 +2314,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+  useStorageRefresh(["wydarzenie:", "stacja:"], load);
 
   const combined = [
     ...events.map(e => ({ ...e, _type: "event" })),
@@ -2560,6 +2691,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
     setLoading(false);
   };
   useEffect(() => { load(); }, [wydarzenieId]);
+  useStorageRefresh(["wydarzenie:" + wydarzenieId], load);
 
   if (loading) return <div className="flex justify-center py-20"><div className="spinner" /></div>;
   if (!item) return (
@@ -3086,6 +3218,7 @@ const FestiwalView = ({ user }) => {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+  useStorageRefresh(["fsection:"], load);
 
   const save = async (data) => {
     const item = editing ? { ...editing, ...data } : { id: uid(), order: sections.length, ...data };
@@ -3430,6 +3563,7 @@ const MiejsceView = ({ user, onUpdate }) => {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+  useStorageRefresh(["miejsce"], load);
 
   const save = async (newData) => {
     await storage.set("miejsce", newData);
@@ -4297,10 +4431,22 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
+        // CRITICAL: this whole block uses storage.getStrict, not storage.get.
+        // The bootstrap is allowed to write defaults only when we're certain
+        // a key is genuinely absent. The permissive `get` returns null on
+        // *any* error (network blip, 5xx, parse failure), which once caused
+        // the bau profile to be silently overwritten with an empty record
+        // when Upstash had a hiccup. `getStrict` throws on real errors so
+        // we bail out of the bootstrap instead of writing destructively.
+        //
+        // If anything throws here we leave initialized=false; the user sees
+        // the loader, retries on next mount, and no data gets clobbered.
+
         // Fast path — if already initialized once, skip the whole bootstrap.
-        // Just load settings in parallel with whatever happens next.
-        const seededFlag = await storage.get("seeded:v1");
+        const seededFlag = await storage.getStrict("seeded:v1");
         if (seededFlag) {
+          // Settings are non-destructive to load via the cache, so the
+          // permissive `get` is fine here.
           const [settings, homeTiles] = await Promise.all([
             storage.get("settings"),
             storage.get("home_tiles"),
@@ -4313,11 +4459,12 @@ export default function App() {
           return;
         }
 
-        // First-run bootstrap. Run independent ops in parallel.
+        // First-run bootstrap. Re-check every key with `getStrict` so we
+        // never overwrite an existing record because of a transient error.
         const [existing, settings, miejsce] = await Promise.all([
-          storage.get("user:bau"),
-          storage.get("settings"),
-          storage.get("miejsce"),
+          storage.getStrict("user:bau"),
+          storage.getStrict("settings"),
+          storage.getStrict("miejsce"),
         ]);
 
         const writes = [];
@@ -4342,7 +4489,11 @@ export default function App() {
         // Seed demo data on first run
         await seedDemoData();
       } catch (err) {
-        console.error("Init error:", err);
+        // We hit a transport error during the bootstrap. Don't write
+        // anything — leave existing data alone. The init banner / loader
+        // will still show; the user can retry by reloading. Safer to
+        // refuse to start than to start with a half-empty store.
+        console.error("Init aborted (network/transport error). No writes performed.", err);
         setInitError(err?.message || String(err));
       }
       setInitialized(true);
@@ -4356,6 +4507,64 @@ export default function App() {
 
   useEffect(() => { if (user) loadUsers(); }, [user, loadUsers]);
 
+  // Live updates — without this, writes from other clients are only visible
+  // after a hard refresh because the SWR cache happily serves the in-memory
+  // copy. We periodically drop the prefix-level caches and listen to the
+  // tab-focus / visibility events as additional refresh triggers. Combined
+  // with the 30-second FRESH_TTL on per-key gets, every page should see
+  // other users' edits within ~30s without any hard refresh.
+  useEffect(() => {
+    if (!user) return;
+
+    // The set of prefixes the rest of the app reads via getAll/get. When we
+    // revalidate one, any open view watching for storage:refresh re-renders.
+    const prefixes = ["user:", "wydarzenie:", "stacja:", "fsection:"];
+    const refreshAll = () => {
+      prefixes.forEach(p => {
+        storage.revalidatePrefix(p);
+        // Kick off a refetch — this fires storage:refresh on completion.
+        storage.prefetchAll(p);
+      });
+      // Also refresh the singleton records the app reads via storage.get.
+      // We can't `prefetch` a single key via the public API, so just
+      // invalidate and let the next read pick it up.
+      storage.revalidatePrefix("settings");
+      storage.revalidatePrefix("miejsce");
+      storage.revalidatePrefix("home_tiles");
+      storage.revalidatePrefix("stacje_intro");
+    };
+
+    // Reload our local users state when any user record changes upstream.
+    const onStorageRefresh = (e) => {
+      const ck = e?.detail?.cacheKey || "";
+      if (ck.startsWith("getAll:user:") || ck.startsWith("get:user:")) {
+        loadUsers();
+      }
+    };
+    window.addEventListener("storage:refresh", onStorageRefresh);
+
+    // Refresh whenever the tab becomes visible after being backgrounded.
+    // This is the most user-noticeable case (open the app on phone after
+    // someone else made an edit on theirs).
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refreshAll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", refreshAll);
+
+    // Periodic poll. 60s is a reasonable cadence — longer than the SWR
+    // FRESH_TTL so we're not double-fetching, short enough that two people
+    // editing simultaneously see each other's changes within a minute.
+    const id = setInterval(refreshAll, 60 * 1000);
+
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("storage:refresh", onStorageRefresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", refreshAll);
+    };
+  }, [user, loadUsers]);
+
   // Restore session on init
   useEffect(() => {
     if (!initialized) return;
@@ -4365,7 +4574,17 @@ export default function App() {
       try {
         const savedUsername = localStorage.getItem("campbau:session");
         if (savedUsername) {
-          const u = await storage.get("user:" + savedUsername);
+          // Use strict so we can distinguish "user was deleted" from
+          // "lookup failed". The latter shouldn't log the user out — we
+          // just retry on next mount.
+          let u = null;
+          let lookupFailed = false;
+          try { u = await storage.getStrict("user:" + savedUsername); }
+          catch (e) {
+            console.warn("Session lookup failed (network?). Keeping session.", e);
+            lookupFailed = true;
+          }
+
           if (!cancelled && u) {
             setUser(u);
             const [s, homeTiles] = await Promise.all([
@@ -4383,8 +4602,10 @@ export default function App() {
             storage.prefetchAll("wydarzenie:");
             storage.prefetchAll("stacja:");
             storage.prefetchAll("fsection:");
-          } else if (!cancelled) {
-            // Session pointed to a user that no longer exists
+          } else if (!cancelled && !lookupFailed) {
+            // Confirmed-absent user (the record was actually deleted).
+            // Only here do we clear the saved session — never on a
+            // network error.
             try { localStorage.removeItem("campbau:session"); } catch {}
           }
         }

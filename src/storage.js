@@ -145,7 +145,12 @@ const emitError = (op, key, err) => {
 // ============================================================
 
 const CACHE_LS_PREFIX = "campbau:cache:";
-const FRESH_TTL_MS  =  5 * 60 * 1000; //  5 min — return without refetch
+// FRESH_TTL_MS = how long a cached value is returned without re-fetching.
+// We keep this short (30s) so writes from other clients become visible
+// quickly during a multi-user session — when SWR sees a stale value it
+// returns it immediately AND fires a background refetch, so there's no
+// latency penalty for users; just better freshness.
+const FRESH_TTL_MS  = 30 * 1000;
 const STALE_TTL_MS  = 24 * 60 * 60 * 1000; // 24 hr — return + refetch in bg
 
 const cache = new Map(); // key -> { value, ts }
@@ -278,6 +283,38 @@ export const storage = {
       }
     });
   },
+  // Strict variant — distinguishes between "key absent" and "fetch failed".
+  // Returns null only when the underlying store responds with a definitive
+  // "no such key" (HTTP 404 or empty payload). On any other error (network
+  // blip, 5xx, timeout, parse failure) it throws.
+  //
+  // Use this anywhere that "absent" would trigger a destructive write
+  // (seeding, default-record creation). The previous behaviour collapsed
+  // both cases to null and caused at least one production data-wipe of
+  // the bau profile when an Upstash hiccup made `get("user:bau")` look
+  // like the key didn't exist; the bootstrap then helpfully overwrote
+  // the live record with an empty default.
+  //
+  // Bypasses the SWR cache to make sure we get a real, current answer.
+  // The caller is expected to gate critical writes on this — never on the
+  // permissive `get`.
+  async getStrict(key) {
+    let r;
+    try {
+      r = await rawStorage.get(key);
+    } catch (err) {
+      const msg = String(err?.message || "");
+      if (msg.includes("404")) return null; // genuine miss
+      throw err;
+    }
+    if (!r) return null;
+    try {
+      return JSON.parse(r.value);
+    } catch (err) {
+      // Corrupt JSON in the store — treat as fetch failure to be safe
+      throw new Error(`Corrupt JSON for ${key}: ${err?.message || err}`);
+    }
+  },
   async set(key, value) {
     try {
       await rawStorage.set(key, JSON.stringify(value));
@@ -332,6 +369,36 @@ export const storage = {
   // Returns immediately; result lands in the cache when ready.
   prefetchAll(prefix) {
     this.getAll(prefix).catch(() => {});
+  },
+  // Drop the cached freshness window for a prefix so the next read goes
+  // to the network. Used for live-update polling — call this on a timer
+  // and on visibility change to pick up writes from other clients without
+  // forcing the user to hard-refresh.
+  //
+  // Concretely: removes the in-memory entries and the localStorage cache
+  // entries for the prefix-level getAll/list keys. Per-item get caches
+  // are left alone — a subsequent getAll() will re-prime them in one
+  // network roundtrip and emit storage:refresh, which views can listen to.
+  revalidatePrefix(prefix) {
+    const dropMemAndLs = (k) => { cache.delete(k); lsDelete(k); };
+    dropMemAndLs(cacheKeyForGetAll(prefix));
+    dropMemAndLs(cacheKeyForList(prefix));
+    // Also clear per-item gets under this prefix, so any view that does
+    // get("user:foo") will refetch instead of returning a 5-minute-old
+    // copy.
+    const memPrefix = "get:" + (prefix || "");
+    for (const k of Array.from(cache.keys())) {
+      if (k.startsWith(memPrefix)) cache.delete(k);
+    }
+    try {
+      const lsPrefix = CACHE_LS_PREFIX + memPrefix;
+      const toDelete = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(lsPrefix)) toDelete.push(k);
+      }
+      toDelete.forEach(k => localStorage.removeItem(k));
+    } catch {}
   },
   // Manual cache controls for special cases
   invalidateAll() {

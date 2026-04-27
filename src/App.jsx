@@ -327,7 +327,14 @@ const GlobalStyles = () => (
     .drawer-enter { animation: drawerIn 0.25s ease; }
     @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-    .prose-simple p { margin: 0 0 0.75em 0; }
+    /* Rich-text content (card descriptions, festival sections, etc.).
+       Base font-size is set on the container so .prose-simple text-sm /
+       text-base callsites that don't specify their own size pick up a
+       slightly larger, more readable default. Line-height is generous
+       for paragraph readability without feeling sparse. */
+    .prose-simple { font-size: 1.0625rem; line-height: 1.65; }
+    @media (min-width: 640px) { .prose-simple { font-size: 1.125rem; } }
+    .prose-simple p { margin: 0 0 0.85em 0; }
     .prose-simple p:last-child { margin-bottom: 0; }
     .prose-simple strong { font-weight: 700; }
     .prose-simple em { font-style: italic; }
@@ -790,6 +797,66 @@ const ToggleTile = ({ checked, onChange, emoji, title, subtitle, disabled = fals
       <SwitchIndicator checked={checked} disabled={disabled} label={title} />
     </button>
   );
+};
+
+// FlipBoard — split-flap airport-display animation. Each character is a "flap"
+// that cycles through random characters before settling on its target. When
+// `text` changes, every position spins for a randomized duration (0.2-1.7s)
+// and lands on its target. Whitespace and punctuation pass through stably,
+// mirroring how real boards keep punctuation flaps still while letters cycle.
+//
+// Implementation notes:
+//   - Animation state lives in a ref so re-renders don't reset timing.
+//   - One state variable (the displayed string); each tick recomputes from
+//     scratch based on per-position elapsed time, so there are no stale
+//     closures.
+//   - Tick interval ~60ms (between 50-80ms reads as a real flapper board;
+//     faster is too slick, slower looks broken).
+//   - Random chars are uppercase Latin + Polish diacritics + digits, since
+//     mottos read better in uppercase and the display visually evokes a
+//     train-station board.
+const FLIP_RANDOM_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZĄĆĘŁŃÓŚŻŹ0123456789";
+const flipRandomChar = () => FLIP_RANDOM_CHARS[Math.floor(Math.random() * FLIP_RANDOM_CHARS.length)];
+// Whitespace and punctuation don't shuffle — they read as stable framing.
+const isStableChar = (c) => /^[\s\-—–.,!?:;'"„"()/]$/.test(c);
+
+const FlipBoard = ({ text, className = "" }) => {
+  // Uppercase for the display-board feel; keep the original `text` for
+  // aria-label so screen readers get the right casing.
+  const target = (text || "").toUpperCase();
+  const [display, setDisplay] = useState(target);
+  const animRef = useRef({ targets: [], settleAts: [], startTime: 0 });
+
+  useEffect(() => {
+    const targets = Array.from(target);
+    if (targets.length === 0) {
+      setDisplay("");
+      return;
+    }
+    // Per-char settle time. Variety in timing gives the airport-board its
+    // character — letters land in waves, not in sync.
+    const settleAts = targets.map(() => 200 + Math.random() * 1500);
+    animRef.current = { targets, settleAts, startTime: performance.now() };
+    setDisplay(targets.map(c => isStableChar(c) ? c : flipRandomChar()).join(""));
+
+    const id = setInterval(() => {
+      const { targets, settleAts, startTime } = animRef.current;
+      const now = performance.now();
+      let allSettled = true;
+      const next = targets.map((tc, i) => {
+        if (isStableChar(tc)) return tc;
+        if (now - startTime >= settleAts[i]) return tc;
+        allSettled = false;
+        return flipRandomChar();
+      });
+      setDisplay(next.join(""));
+      if (allSettled) clearInterval(id);
+    }, 60);
+
+    return () => clearInterval(id);
+  }, [target]);
+
+  return <span className={className} aria-label={text}>{display}</span>;
 };
 
 const Modal = ({ open, onClose, title, children, maxWidth = "max-w-lg" }) => {
@@ -1746,12 +1813,36 @@ const isAttendanceComplete = (user, startDate, endDate) => {
   return true;
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "" }) => {
+const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "" } }) => {
   const tiles = HOME_TILES.filter(t => {
     if (t.conditional === "admin") return user.role === "admin";
     if (t.conditional === "guests") return user.role === "admin" || guestListVisible;
     return true;
   });
+
+  // Rotating motto: pick a random motto every 10 seconds. The FlipBoard
+  // component handles the airport-flap animation when the text changes.
+  // Hooks: useState for the currently-shown motto, useEffect to rotate it.
+  // Picking is biased to *not* repeat — if there's more than one motto and
+  // the random pick equals the current, advance one slot. Avoids the
+  // disappointing case of "different motto" being the same one again.
+  const mottos = homeContent.mottos || [];
+  const [mottoIdx, setMottoIdx] = useState(() =>
+    mottos.length > 0 ? Math.floor(Math.random() * mottos.length) : 0
+  );
+  useEffect(() => {
+    if (mottos.length < 2) return;
+    const id = setInterval(() => {
+      setMottoIdx(prev => {
+        let next = Math.floor(Math.random() * mottos.length);
+        if (next === prev) next = (next + 1) % mottos.length;
+        return next;
+      });
+    }, 10000);
+    return () => clearInterval(id);
+  }, [mottos.length]);
+  const currentMotto = mottos[mottoIdx] || "";
+
   const [miejsce, setMiejsce] = useState(null);
   const [miejsceLoaded, setMiejsceLoaded] = useState(false);
 
@@ -1798,6 +1889,22 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
             (< lg) everything stacks linearly in source order. */}
         <div className="lg:grid lg:grid-cols-3 lg:gap-6">
           <div className="lg:col-span-2">
+            {/* Editorial: rotating motto (airport-flap animation) and a
+                rich-text festival description. Rendered above other widgets
+                because it's the most evocative element on the page — sets
+                the tone before practical info (countdown, attendance). */}
+            {currentMotto && (
+              <div className="mb-6">
+                <FlipBoard
+                  text={currentMotto}
+                  className="font-display block text-3xl sm:text-4xl lg:text-5xl leading-[0.95] tracking-tight" />
+              </div>
+            )}
+            {homeContent.description && (
+              <div className="prose-simple mb-8">
+                {renderRichText(homeContent.description)}
+              </div>
+            )}
             {miejsceLoaded && startDate && (
               <CountdownWidget startDate={startDate} endDate={endDate} />
             )}
@@ -1924,7 +2031,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
               </button>
             )}
             {intro ? (
-              <div className="prose-simple text-sm pr-20">{renderRichText(intro)}</div>
+              <div className="prose-simple pr-20">{renderRichText(intro)}</div>
             ) : (
               <div className="font-mono text-xs uppercase tracking-widest opacity-60 pr-20">
                 Brak opisu — kliknij "Edytuj" by dodać.
@@ -2318,7 +2425,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
-        {item.description && <div className="prose-simple text-base mb-6">{renderRichText(item.description)}</div>}
+        {item.description && <div className="prose-simple mb-6">{renderRichText(item.description)}</div>}
       </div>
       <div className="mx-5 border-t border-black pt-5 mb-5">
         <div className="flex items-center justify-between mb-3">
@@ -2977,7 +3084,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
-        {item.description && <div className="prose-simple text-base mb-10">{renderRichText(item.description)}</div>}
+        {item.description && <div className="prose-simple mb-10">{renderRichText(item.description)}</div>}
       </div>
 
       {/* Guest list section */}
@@ -3423,7 +3530,7 @@ const FestiwalView = ({ user }) => {
                       </div>
                     )}
                     <DisplayHeading as="h2" className="font-display text-3xl font-bold uppercase leading-tight mb-4">{s.title}</DisplayHeading>
-                    {s.content && <div className="prose-simple festiwal-prose text-base">{renderRichText(s.content)}</div>}
+                    {s.content && <div className="prose-simple festiwal-prose">{renderRichText(s.content)}</div>}
                   </div>
                 );
                 return (
@@ -3724,7 +3831,7 @@ const MiejsceView = ({ user, onUpdate }) => {
             {data.address && (
               <Card className="p-5">
                 <div className="font-mono text-xs uppercase tracking-widest mb-2 opacity-70">Adres</div>
-                <div className="prose-simple text-base">{renderRichText(data.address)}</div>
+                <div className="prose-simple">{renderRichText(data.address)}</div>
               </Card>
             )}
             {mapEmbedUrl && (
@@ -3741,7 +3848,7 @@ const MiejsceView = ({ user, onUpdate }) => {
             {data.contact && (
               <Card className="p-5">
                 <div className="font-mono text-xs uppercase tracking-widest mb-2 opacity-70">Kontakt</div>
-                <div className="prose-simple text-base">{renderRichText(data.contact)}</div>
+                <div className="prose-simple">{renderRichText(data.contact)}</div>
               </Card>
             )}
             {!data.photos.length && !data.address && !data.contact && !mapEmbedUrl && !dateRangeText && (
@@ -4262,6 +4369,124 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
 // description, the current emoji shown big, and an inline emoji input that
 // saves on every keystroke (debounced via uncontrolled blur+enter, but we save
 // on change to feel snappy). Empty input = revert to default.
+// Editor for the home page's editorial content — rotating mottos and the
+// festival description. Mottos are managed as a list with add/remove/inline
+// edit; description is a single rich-text textarea. Each save triggers an
+// optimistic update at the App level via onSave, so changes show up on the
+// home page immediately even before the network round-trip resolves.
+const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }) => {
+  const [mottos, setMottos] = useState(content.mottos || []);
+  const [description, setDescription] = useState(content.description || "");
+  const [draftMotto, setDraftMotto] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+
+  // Resync local state when the parent content changes (e.g. another admin
+  // edited it in a different session and the storage refresh fired).
+  useEffect(() => {
+    setMottos(content.mottos || []);
+    setDescription(content.description || "");
+  }, [content]);
+
+  const persist = async (next) => {
+    setSaving(true);
+    try {
+      await onSave(next);
+      setSavedAt(Date.now());
+    } catch (err) {
+      console.warn("home_content save failed", err);
+      window.dispatchEvent(new Event("storage:error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addMotto = async () => {
+    const v = draftMotto.trim();
+    if (!v) return;
+    const next = [...mottos, v];
+    setMottos(next); setDraftMotto("");
+    await persist({ mottos: next, description });
+  };
+  const removeMotto = async (i) => {
+    const next = mottos.filter((_, idx) => idx !== i);
+    setMottos(next);
+    await persist({ mottos: next, description });
+  };
+  const editMotto = async (i, value) => {
+    const next = mottos.map((m, idx) => idx === i ? value : m);
+    setMottos(next);
+    // Only persist when the input loses focus (handled by onBlur below) so
+    // we're not flooding the storage layer per-keystroke.
+  };
+  const persistMottoEdit = async () => {
+    await persist({ mottos: mottos.map(m => (m || "").trim()).filter(Boolean), description });
+  };
+  const saveDescription = async () => {
+    await persist({ mottos, description });
+  };
+
+  return (
+    <Card className="p-5 space-y-5">
+      <div>
+        <div className="font-display font-bold uppercase mb-1">Motta na stronie głównej</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
+          Wyświetlają się losowo i zmieniają co 10 sekund. Dodaj kilka — animacja działa najlepiej, gdy jest z czego wybierać.
+        </div>
+        {mottos.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {mottos.map((m, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input type="text" value={m}
+                  onChange={e => editMotto(i, e.target.value)}
+                  onBlur={persistMottoEdit}
+                  className="flex-1 border border-black px-3 py-2 bg-white" />
+                <button type="button"
+                  onClick={() => { if (window.confirm("Usunąć to motto?")) removeMotto(i); }}
+                  className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 hover:bg-black hover:text-white">
+                  Usuń
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <input type="text" value={draftMotto}
+            onChange={e => setDraftMotto(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addMotto(); } }}
+            placeholder="Dodaj nowe motto"
+            className="flex-1 border border-black px-3 py-2 bg-white" />
+          <Button size="sm" onClick={addMotto} disabled={!draftMotto.trim()}>+ Dodaj</Button>
+        </div>
+      </div>
+
+      <div className="border-t border-black pt-5">
+        <div className="font-display font-bold uppercase mb-1">Opis festiwalu</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
+          Wyświetla się pod mottem na stronie głównej. Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit.
+        </div>
+        <textarea value={description}
+          onChange={e => setDescription(e.target.value)}
+          onBlur={saveDescription}
+          rows={6}
+          placeholder="np. Camp Bau to mały, prywatny festiwal..."
+          className="w-full border border-black px-3 py-2 bg-white resize-y" />
+      </div>
+
+      {savedAt && !saving && (
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+          Zapisano
+        </div>
+      )}
+      {saving && (
+        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+          Zapisywanie…
+        </div>
+      )}
+    </Card>
+  );
+};
+
 const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   const [savingId, setSavingId] = useState(null);
   const handleChange = async (id, value) => {
@@ -4317,7 +4542,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   );
 };
 
-const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon }) => {
+const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon, homeContent = { mottos: [], description: "" }, onSaveHomeContent }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -4393,6 +4618,7 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
             )}
           </div>
         </Card>
+        <HomeContentEditor content={homeContent} onSave={onSaveHomeContent} />
         <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -4488,6 +4714,10 @@ export default function App() {
   // "wydarzenia"), value is the emoji string. Missing keys fall back to the
   // default in HOME_TILES. Persisted at storage key `home_tiles`.
   const [homeTilesOverrides, setHomeTilesOverrides] = useState({});
+  // Editorial content for the home page sidebar — rotating mottos and a
+  // rich-text "about the festival" blurb. Both managed by admin via the
+  // admin page; persisted at storage key `home_content`.
+  const [homeContent, setHomeContent] = useState({ mottos: [], description: "" });
   const [stacjeRefreshKey, setStacjeRefreshKey] = useState(0);
 
   // Router integration
@@ -4563,15 +4793,20 @@ export default function App() {
         if (seededFlag) {
           // Settings are non-destructive to load via the cache, so the
           // permissive `get` is fine here.
-          const [settings, homeTiles] = await Promise.all([
+          const [settings, homeTiles, homeC] = await Promise.all([
             storage.get("settings"),
             storage.get("home_tiles"),
+            storage.get("home_content"),
           ]);
           setGuestListVisible(!!settings?.guestListVisible);
           setStacjeListVisible(settings?.stacjeListVisible !== false);
           setAttendanceVisible(!!settings?.attendanceVisible);
           setAttendanceDeadline(settings?.attendanceDeadline || "");
           setHomeTilesOverrides(homeTiles || {});
+          setHomeContent({
+            mottos: Array.isArray(homeC?.mottos) ? homeC.mottos : [],
+            description: homeC?.description || "",
+          });
           setInitialized(true);
           return;
         }
@@ -4644,12 +4879,33 @@ export default function App() {
         storage.prefetchAll(p);
       });
       // Also refresh the singleton records the app reads via storage.get.
-      // We can't `prefetch` a single key via the public API, so just
-      // invalidate and let the next read pick it up.
+      // Drop the cache, then re-fetch and propagate to the App-level state
+      // that other views read from (e.g. homeContent → HomeView mottos).
       storage.revalidatePrefix("settings");
       storage.revalidatePrefix("miejsce");
       storage.revalidatePrefix("home_tiles");
+      storage.revalidatePrefix("home_content");
       storage.revalidatePrefix("stacje_intro");
+
+      // Re-fetch and update local state so the App's own consumers
+      // (HomeView etc.) see fresh data without waiting for a render cycle
+      // triggered by something else.
+      storage.get("home_content").then(c => {
+        setHomeContent({
+          mottos: Array.isArray(c?.mottos) ? c.mottos : [],
+          description: c?.description || "",
+        });
+      }).catch(() => {});
+      storage.get("home_tiles").then(t => {
+        setHomeTilesOverrides(t || {});
+      }).catch(() => {});
+      storage.get("settings").then(s => {
+        if (!s) return;
+        setGuestListVisible(!!s.guestListVisible);
+        setStacjeListVisible(s.stacjeListVisible !== false);
+        setAttendanceVisible(!!s.attendanceVisible);
+        setAttendanceDeadline(s.attendanceDeadline || "");
+      }).catch(() => {});
     };
 
     // Reload our local users state when any user record changes upstream.
@@ -4705,9 +4961,10 @@ export default function App() {
 
           if (!cancelled && u) {
             setUser(u);
-            const [s, homeTiles] = await Promise.all([
+            const [s, homeTiles, homeC] = await Promise.all([
               storage.get("settings"),
               storage.get("home_tiles"),
+              storage.get("home_content"),
             ]);
             if (!cancelled) {
               setGuestListVisible(!!s?.guestListVisible);
@@ -4715,6 +4972,10 @@ export default function App() {
               setAttendanceVisible(!!s?.attendanceVisible);
               setAttendanceDeadline(s?.attendanceDeadline || "");
               setHomeTilesOverrides(homeTiles || {});
+              setHomeContent({
+                mottos: Array.isArray(homeC?.mottos) ? homeC.mottos : [],
+                description: homeC?.description || "",
+              });
             }
             // Warm the cache for the rest of the app
             storage.prefetchAll("user:");
@@ -4741,15 +5002,20 @@ export default function App() {
     setUser(u);
     routerNavigate("/");
     try { localStorage.setItem("campbau:session", u.username); } catch {}
-    const [s, homeTiles] = await Promise.all([
+    const [s, homeTiles, homeC] = await Promise.all([
       storage.get("settings"),
       storage.get("home_tiles"),
+      storage.get("home_content"),
     ]);
     setGuestListVisible(!!s?.guestListVisible);
     setStacjeListVisible(s?.stacjeListVisible !== false);
     setAttendanceVisible(!!s?.attendanceVisible);
     setAttendanceDeadline(s?.attendanceDeadline || "");
     setHomeTilesOverrides(homeTiles || {});
+    setHomeContent({
+      mottos: Array.isArray(homeC?.mottos) ? homeC.mottos : [],
+      description: homeC?.description || "",
+    });
     // Warm the cache so navigation feels instant
     storage.prefetchAll("user:");
     storage.prefetchAll("wydarzenie:");
@@ -4820,6 +5086,26 @@ export default function App() {
     } catch (err) {
       // Roll back on error
       setHomeTilesOverrides(homeTilesOverrides);
+      throw err;
+    }
+  };
+
+  // Save the editorial home-page content (mottos array + description text).
+  // Both fields are optional; empty arrays/strings are valid. Optimistic
+  // update with rollback on storage failure.
+  const onSaveHomeContent = async (next) => {
+    const sanitized = {
+      mottos: Array.isArray(next?.mottos)
+        ? next.mottos.map(s => String(s || "").trim()).filter(Boolean)
+        : [],
+      description: String(next?.description || ""),
+    };
+    const prev = homeContent;
+    setHomeContent(sanitized);
+    try {
+      await storage.set("home_content", sanitized);
+    } catch (err) {
+      setHomeContent(prev);
       throw err;
     }
   };
@@ -4904,7 +5190,7 @@ export default function App() {
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={
-              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides} attendanceDeadline={attendanceDeadline} />
+              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides} attendanceDeadline={attendanceDeadline} homeContent={homeContent} />
             } />
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />
@@ -4932,7 +5218,8 @@ export default function App() {
                     stacjeListVisible={stacjeListVisible} onToggleStacjeList={onToggleStacjeList}
                     attendanceVisible={attendanceVisible} onToggleAttendance={onToggleAttendance}
                     attendanceDeadline={attendanceDeadline} onSaveAttendanceDeadline={onSaveAttendanceDeadline}
-                    homeTilesOverrides={homeTilesOverrides} onSaveHomeTileIcon={onSaveHomeTileIcon} />
+                    homeTilesOverrides={homeTilesOverrides} onSaveHomeTileIcon={onSaveHomeTileIcon}
+                    homeContent={homeContent} onSaveHomeContent={onSaveHomeContent} />
                 : <EmptyState message="Brak dostępu" />
             } />
             <Route path="*" element={<Navigate to="/" replace />} />

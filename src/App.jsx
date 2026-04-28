@@ -789,7 +789,7 @@ const ToggleTile = ({ checked, onChange, emoji, title, subtitle, disabled = fals
           <span className={titleClass}>{title}</span>
         </div>
         {subtitle && (
-          <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${checked ? "opacity-80" : "opacity-60"}`}>
+          <div className={`font-mono text-[11px] uppercase tracking-widest mt-1 ${checked ? "opacity-80" : "opacity-60"}`}>
             {subtitle}
           </div>
         )}
@@ -935,7 +935,7 @@ const ErrorToast = () => {
     <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-[100] space-y-2 pointer-events-none">
       {errors.map(e => (
         <div key={e.id} className="bg-black text-white border border-black p-3 fade-in pointer-events-auto">
-          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-1">
+          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-1">
             Błąd zapisu {e.op && `· ${e.op}`} {e.key && `· ${e.key}`}
           </div>
           <div className="text-sm break-words">{e.message}</div>
@@ -1106,7 +1106,7 @@ const LoginView = ({ onLogin, initError }) => {
             spellCheck={false}
             required />
           {error && <div className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 bg-white/50">{error}</div>}
-          {initError && !error && <div className="font-mono text-[10px] uppercase tracking-widest border border-black px-3 py-2 bg-white/50">Init: {initError}</div>}
+          {initError && !error && <div className="font-mono text-[11px] uppercase tracking-widest border border-black px-3 py-2 bg-white/50">Init: {initError}</div>}
           <button type="submit"
             onClick={doLogin}
             disabled={loading}
@@ -1114,7 +1114,7 @@ const LoginView = ({ onLogin, initError }) => {
             {loading ? "..." : "Wejdź"}
           </button>
         </form>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-center mt-8 opacity-60">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-center mt-8 opacity-60">
           Dostęp tylko dla uczestników
         </p>
       </div>
@@ -1126,7 +1126,7 @@ const LoginView = ({ onLogin, initError }) => {
 // NAVIGATION
 // ============================================================
 const NAV_ITEMS = [
-  { id: "home", label: "Start", icon: "🏠" },
+  { id: "home", label: "Start", icon: "🚀" },
   { id: "wydarzenia", label: "Wydarzenia", icon: "📅" },
   { id: "stacje", label: "Stacje kosmiczne", icon: "🛸" },
   { id: "festiwal", label: "O Festiwalu", icon: "🌌" },
@@ -1276,7 +1276,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display truncate">{displayNameOf(user)}</div>
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">@{user.username}{user.role === "admin" && " · admin"}</div>
+              <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 truncate">@{user.username}{user.role === "admin" && " · admin"}</div>
             </div>
             <div className="font-mono text-xs uppercase tracking-widest opacity-50 shrink-0">Profil →</div>
           </button>
@@ -1349,6 +1349,7 @@ const EmptyState = ({ message }) => (
 // any of these via the home_tiles storage record (see AdminView). Anything not
 // overridden falls back to the default below.
 const HOME_TILES = [
+  { id: "home", icon: "🚀", title: "Start", desc: "Strona główna", hideFromHomeRail: true },
   { id: "wydarzenia", icon: "📅", title: "Wydarzenia", desc: "Plan festiwalu chronologicznie" },
   { id: "stacje", icon: "🛸", title: "Stacje kosmiczne", desc: "Aktywności uczestników" },
   { id: "festiwal", icon: "🌌", title: "O Festiwalu", desc: "Koncept, zasady, FAQ" },
@@ -1561,11 +1562,11 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
       {/* Header row — date/location on left, moon in upper right */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{todayStr}</span>
+          <span className="font-mono text-[11px] uppercase tracking-widest opacity-70">{todayStr}</span>
           {locationName && (
             <>
-              <span className="font-mono text-[10px] opacity-40">·</span>
-              <span className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">{locationName}</span>
+              <span className="font-mono text-[11px] opacity-40">·</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest opacity-60 truncate">{locationName}</span>
             </>
           )}
         </div>
@@ -1674,14 +1675,14 @@ const PwaInstallBanner = () => {
         <div className="text-3xl shrink-0 emoji-mono">📲</div>
         <div className="flex-1 min-w-0">
           <div className="font-display text-base">Zainstaluj aplikację</div>
-          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-0.5">
+          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-0.5">
             Szybszy dostęp z ekranu głównego
           </div>
         </div>
         <div className="flex flex-col gap-2 shrink-0">
           <Button size="sm" onClick={install}>Zainstaluj</Button>
           <button onClick={dismiss}
-            className="font-mono text-[10px] uppercase tracking-widest opacity-60 hover:opacity-100">
+            className="font-mono text-[11px] uppercase tracking-widest opacity-60 hover:opacity-100">
             Później
           </button>
         </div>
@@ -1697,7 +1698,7 @@ const PwaInstallBanner = () => {
               <li>Upewnij się, że przełącznik <strong>"Otwórz jako aplikację"</strong> jest włączony (zielony) — domyślnie jest.</li>
               <li>Stuknij <strong>"Dodaj"</strong> w prawym górnym rogu.</li>
             </ol>
-            <p className="font-mono text-[10px] uppercase tracking-widest opacity-60 pt-2">
+            <p className="font-mono text-[11px] uppercase tracking-widest opacity-60 pt-2">
               Aplikacja pojawi się obok innych ikon i otworzy się bez paska przeglądarki — w trybie pełnoekranowym.
             </p>
             <Button onClick={() => setShowIosHint(false)} className="w-full">OK</Button>
@@ -1736,9 +1737,9 @@ const CountdownWidget = ({ startDate, endDate }) => {
   if (past) {
     return (
       <div className="border border-black p-5 mb-6">
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">Camp Bau</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-2">Camp Bau</div>
         <div className="font-display text-2xl">Do zobaczenia w przyszłym roku!</div>
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-2">{rangeText}</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-2">{rangeText}</div>
       </div>
     );
   }
@@ -1746,7 +1747,7 @@ const CountdownWidget = ({ startDate, endDate }) => {
   if (inProgress) {
     return (
       <div className="border border-black p-5 mb-6 bg-black text-white">
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-80 mb-2">Camp Bau · {rangeText}</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-80 mb-2">Camp Bau · {rangeText}</div>
         <div className="font-display text-3xl">Festiwal trwa! 🌌</div>
       </div>
     );
@@ -1770,8 +1771,8 @@ const CountdownWidget = ({ startDate, endDate }) => {
   return (
     <div className="border border-black p-5 mb-6">
       <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">Do festiwalu</div>
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{rangeText}</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">Do festiwalu</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">{rangeText}</div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <div className="text-center border border-black py-3">
@@ -1822,7 +1823,7 @@ const AttendancePrompt = ({ user, startDate, endDate, onNavigate }) => {
         <div className="text-2xl emoji-mono shrink-0">📅</div>
         <div className="flex-1 min-w-0">
           <div className="font-display text-base mb-1">Zaznacz swoją obecność</div>
-          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-3">
+          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-3">
             {unmarked.length === days.length
               ? "Daj znać, w które dni planujesz przyjechać"
               : `Pozostało do zaznaczenia: ${unmarked.length} ${unmarked.length === 1 ? "dzień" : "dni"}`}
@@ -1854,32 +1855,23 @@ const isAttendanceComplete = (user, startDate, endDate) => {
 
 const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "" } }) => {
   const tiles = HOME_TILES.filter(t => {
+    // Don't link the home page from itself.
+    if (t.hideFromHomeRail) return false;
     if (t.conditional === "admin") return user.role === "admin";
     if (t.conditional === "guests") return user.role === "admin" || guestListVisible;
     return true;
   });
 
-  // Rotating motto: pick a random motto every 10 seconds. The FlipBoard
-  // component handles the airport-flap animation when the text changes.
-  // Hooks: useState for the currently-shown motto, useEffect to rotate it.
-  // Picking is biased to *not* repeat — if there's more than one motto and
-  // the random pick equals the current, advance one slot. Avoids the
-  // disappointing case of "different motto" being the same one again.
+  // Motto: pick one at random on mount and stick with it for the lifetime
+  // of the page. The previous behaviour rotated every 10 seconds with a
+  // flip-board animation, but the animation read as visually busy and the
+  // rotation pulled focus away from whatever the user was actually doing on
+  // the page. A single motto per visit keeps the moment of "discovery"
+  // (different one on next reload) without competing with the rest of the UI.
   const mottos = homeContent.mottos || [];
-  const [mottoIdx, setMottoIdx] = useState(() =>
+  const [mottoIdx] = useState(() =>
     mottos.length > 0 ? Math.floor(Math.random() * mottos.length) : 0
   );
-  useEffect(() => {
-    if (mottos.length < 2) return;
-    const id = setInterval(() => {
-      setMottoIdx(prev => {
-        let next = Math.floor(Math.random() * mottos.length);
-        if (next === prev) next = (next + 1) % mottos.length;
-        return next;
-      });
-    }, 10000);
-    return () => clearInterval(id);
-  }, [mottos.length]);
   const currentMotto = mottos[mottoIdx] || "";
 
   const [miejsce, setMiejsce] = useState(null);
@@ -1926,17 +1918,17 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
         {/* Two-column on desktop: widgets stack on the left (~66% via col-span-2),
             page list lives in the right rail (~33%). On mobile and tablet
             (< lg) everything stacks linearly in source order. */}
-        <div className="lg:grid lg:grid-cols-3 lg:gap-6">
-          <div className="lg:col-span-2">
-            {/* Editorial: rotating motto (airport-flap animation) and a
-                rich-text festival description. Rendered above other widgets
-                because it's the most evocative element on the page — sets
-                the tone before practical info (countdown, attendance). */}
+        <div className="lg:grid lg:grid-cols-4 lg:gap-8">
+          <div className="lg:col-span-3">
+            {/* Motto — single random pick per visit. Same dual-font
+                styling and size as the page headings (DisplayHeading
+                randomly mixes Verlag Black / Verlag Compressed Bold per
+                character). Centered within the column for visual presence. */}
             {currentMotto && (
-              <div className="mb-6">
-                <FlipBoard
-                  text={currentMotto}
-                  className="font-display block text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight" />
+              <div className="mb-6 text-center">
+                <DisplayHeading as="div" className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] break-words">
+                  {currentMotto}
+                </DisplayHeading>
               </div>
             )}
             {homeContent.description && (
@@ -1989,7 +1981,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
                     className="text-left hover:bg-black hover:text-white transition-colors group flex items-center gap-3 px-2 py-2">
                     <div className="text-2xl leading-none shrink-0 emoji-mono">{icon}</div>
                     <div className="min-w-0">
-                      <div className="font-display text-sm leading-tight">{t.title}</div>
+                      <div className="font-display text-base leading-tight">{t.title}</div>
                     </div>
                   </button>
                 );
@@ -2064,7 +2056,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
           <div className="relative">
             {isAdmin && (
               <button onClick={() => setIntroOpen(true)}
-                className="absolute top-0 right-0 font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
+                className="absolute top-0 right-0 font-mono text-[11px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
                 Edytuj
               </button>
             )}
@@ -2088,7 +2080,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
           <>
             {!listVisible && isAdmin && (
               <div className="px-5 mb-3">
-                <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 border border-dashed border-black px-3 py-2">
+                <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 border border-dashed border-black px-3 py-2">
                   Lista jest ukryta dla gości — widzisz ją jako admin
                 </div>
               </div>
@@ -2135,7 +2127,7 @@ const StacjeIntroModal = ({ open, onClose, initial, onSave }) => {
     <Modal open={open} onClose={onClose} title="Edytuj wstęp">
       <form onSubmit={submit} className="space-y-4">
         <Textarea label="Tekst wstępu" value={text} onChange={e => setText(e.target.value)} rows={6} />
-        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
         <div className="flex gap-3">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -2218,14 +2210,14 @@ const StacjaCard = ({ item, users, mystery, onClick, onAdminDelete }) => {
       )}
       <div className="p-4 flex-1 min-w-0 flex flex-col">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
-          {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{dateLine}</span>}
+          <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
+          {dateLine && <span className="font-mono text-[11px] uppercase tracking-widest opacity-70">{dateLine}</span>}
         </div>
         <h3 className="font-display text-lg mb-1 leading-tight">
           {item.image && item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
         </h3>
         {item.description && <p className="text-sm opacity-80 line-clamp-2 mb-2">{item.description}</p>}
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mt-auto">
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 mt-auto">
           {ownerNames}{item.owners?.length > 3 && ` +${item.owners.length - 3}`}
         </div>
       </div>
@@ -2308,7 +2300,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
               onChange={e => update("dateSuggestion", e.target.value)}
               placeholder="np. piątek wieczorem" />
             {!isAdmin && (
-              <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+              <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
                 Tylko Bau może wyznaczyć ostateczną datę i godzinę. Twoja sugestia jest widoczna dla wszystkich.
               </p>
             )}
@@ -2329,7 +2321,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
                 <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
                   className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                   <div className="font-display text-sm">{opt.title}</div>
-                  <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                  <div className={`font-mono text-[11px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
                 </button>
               );
             })}
@@ -2387,7 +2379,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
         </div>
         <div className="px-5 pt-10 flex flex-col items-center text-center">
           <div className="text-7xl emoji-mono mb-6">🔒</div>
-          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
+          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
           <h1 className="font-display text-4xl sm:text-5xl font-bold uppercase mb-4">???</h1>
           <p className="font-mono text-xs uppercase tracking-widest opacity-60 max-w-sm">
             Szczegóły pojawią się wkrótce
@@ -2457,8 +2449,8 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
       ) : null}
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{visibilityLabel(item.visibility)}</span>
-          {dateLine && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{dateLine}</span>}
+          <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
+          {dateLine && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{dateLine}</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
@@ -2482,7 +2474,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-display font-bold truncate">{displayNameOf(o)}</div>
-                <div className="font-mono text-[10px] uppercase opacity-60">@{o.username}</div>
+                <div className="font-mono text-[11px] uppercase opacity-60">@{o.username}</div>
               </div>
               {canEdit && owners.length > 1 && (
                 <button onClick={() => removeCoOwner(o.id)} className="font-mono text-xs uppercase border border-black px-2 py-1">Usuń</button>
@@ -2513,7 +2505,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                    <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
+                    <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}</div>
                   </div>
                 </button>
               ))}
@@ -2732,11 +2724,11 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         ) : null}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            {it._type === "stacja" && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Stacja kosmiczna</span>}
-                            {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
-                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Zapisy</span>}
-                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Kosmobus</span>}
-                            {it.time && <span className="font-mono text-[10px] uppercase tracking-widest opacity-70">{it.time.slice(0, 5)}</span>}
+                            {it._type === "stacja" && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Stacja kosmiczna</span>}
+                            {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Tylko admin</span>}
+                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Zapisy</span>}
+                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Kosmobus</span>}
+                            {it.time && <span className="font-mono text-[11px] uppercase tracking-widest opacity-70">{it.time.slice(0, 5)}</span>}
                           </div>
                           <div className="flex items-start justify-between gap-3 flex-1">
                             <div className="flex-1 min-w-0">
@@ -2778,8 +2770,8 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-2">
-                              {it.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Zapisy</span>}
-                              {it.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">Kosmobus</span>}
+                              {it.guestListEnabled && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Zapisy</span>}
+                              {it.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Kosmobus</span>}
                             </div>
                             <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">
                               {it.image && it.icon && <span className="mr-2 emoji-mono">{it.icon}</span>}{it.title}
@@ -2878,7 +2870,7 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
                 <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
                   className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                   <div className="font-display text-sm">{opt.title}</div>
-                  <div className={`font-mono text-[10px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                  <div className={`font-mono text-[11px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
                 </button>
               );
             })}
@@ -3113,11 +3105,11 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
       ) : null}
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
-          {item.date && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">{formatDate(item.date, item.time)}</span>}
-          {item.visibility === "admin" && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5">Tylko admin</span>}
-          {item.guestListEnabled && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">✍️</span> Zapisy</span>}
-          {item.transportNeeded && <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5"><span className="emoji-mono">🚗</span> Transport</span>}
-          {item.kosmobusEnabled && <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5"><span className="emoji-mono">🚌</span> Kosmobus</span>}
+          {item.date && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{formatDate(item.date, item.time)}</span>}
+          {item.visibility === "admin" && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Tylko admin</span>}
+          {item.guestListEnabled && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">✍️</span> Zapisy</span>}
+          {item.transportNeeded && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚗</span> Transport</span>}
+          {item.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
@@ -3134,7 +3126,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                 <span className="text-2xl emoji-mono">✍️</span>
                 <h2 className="font-display text-xl">Zapisy</h2>
               </div>
-              <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+              <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
                 {guestUsers.length} {guestUsers.length === 1 ? "osoba" : "osób"}
               </p>
             </div>
@@ -3162,7 +3154,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
               ))}
             </div>
           ) : (
-            <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
+            <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
               Nikt jeszcze się nie zapisał
             </div>
           )}
@@ -3186,7 +3178,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                     <span className="text-2xl emoji-mono">🚌</span>
                     <h3 className="font-display text-lg">Kosmobus</h3>
                   </div>
-                  <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                  <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
                     Transport organizowany
                   </p>
                 </div>
@@ -3194,7 +3186,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                   <div className="font-display text-2xl leading-none">
                     {kosmoEnrolled.length} / {KOSMOBUS_SEATS}
                   </div>
-                  <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                  <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
                     {kosmoLeft > 0 ? `${kosmoLeft} ${seatsLabel(kosmoLeft)} wolne` : "Brak miejsc"}
                   </div>
                 </div>
@@ -3243,7 +3235,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                       {t.emoji && <span className="text-2xl emoji-mono">{t.emoji}</span>}
                       <h3 className="font-display text-lg break-words">{t.name}</h3>
                     </div>
-                    <p className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                    <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
                       Organizator: {(() => {
                         const o = users.find(u => u.id === t.ownerId);
                         return o ? displayNameOf(o) : "—";
@@ -3254,7 +3246,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                     <div className="font-display text-2xl leading-none">
                       {t.enrolled.length} / {t.totalSeats}
                     </div>
-                    <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 mt-1">
+                    <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
                       {seatsLeft > 0 ? `${seatsLeft} ${seatsLabel(seatsLeft)} wolne` : "Brak miejsc"}
                     </div>
                   </div>
@@ -3349,10 +3341,10 @@ const UserRow = ({ u, badge, showRemove, onRemove }) => (
         {displayNameOf(u)}
         {badge && <span className="ml-2 font-mono text-[9px] uppercase tracking-widest opacity-60">· {badge}</span>}
       </div>
-      <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
+      <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}</div>
     </div>
     {showRemove && (
-      <button onClick={onRemove} className="font-mono text-[10px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
+      <button onClick={onRemove} className="font-mono text-[11px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
     )}
   </div>
 );
@@ -3387,7 +3379,7 @@ const UserPickerModal = ({ open, onClose, users, onPick }) => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display text-sm truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}</div>
+                  <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}</div>
                 </div>
               </button>
             ))}
@@ -3425,7 +3417,7 @@ const TransportFormModal = ({ open, onClose, onSave }) => {
           placeholder="np. Auto Kasi z Warszawy" required />
         <Input label="Łączna liczba miejsc (z Tobą)" type="number" min="1" max="20"
           value={form.totalSeats} onChange={e => update("totalSeats", parseInt(e.target.value, 10) || 1)} required />
-        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
           Po zapisaniu zostaniesz automatycznie dodany jako organizator.
         </p>
         <div className="flex gap-3 pt-2">
@@ -3637,7 +3629,7 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
           onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Treść (rich text)" value={form.content} onChange={e => update("content", e.target.value)} rows={7} />
-        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
         <ImageUpload label="Zdjęcie" value={form.photo} onChange={v => update("photo", v)} />
         {form.photo && (
           <div>
@@ -3727,7 +3719,7 @@ const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
     <Card className="p-5">
       <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
         <div className="font-mono text-xs uppercase tracking-widest opacity-70">Twoja obecność</div>
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60">Stuknij dzień, aby zaznaczyć</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60">Stuknij dzień, aby zaznaczyć</div>
       </div>
       <div className="overflow-x-auto no-scrollbar -mx-5 px-5"
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
@@ -3757,7 +3749,7 @@ const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
                       return (
                         <button key={opt.value}
                           onClick={() => setAttendance(day, opt.value)}
-                          className={`font-display text-[10px] py-1.5 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                          className={`font-display text-[11px] py-1.5 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                           {opt.label}
                         </button>
                       );
@@ -3987,7 +3979,7 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
             value={form.lng ?? ""} onChange={e => update("lng", parseCoord(e.target.value))}
             placeholder="20.8667" />
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">Współrzędne są używane do widgetu zachodu słońca</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">Współrzędne są używane do widgetu zachodu słońca</p>
         <Textarea label="Kontakt" value={form.contact} onChange={e => update("contact", e.target.value)} rows={4}
           placeholder="Telefon, email, itp." />
         <div className="flex gap-3 pt-2">
@@ -4143,7 +4135,7 @@ const ChangePasswordModal = ({ open, onClose, user, onUpdate }) => {
         <Input label="Obecne hasło" type="password" value={current} onChange={e => setCurrent(e.target.value)} autoComplete="current-password" />
         <Input label="Nowe hasło" type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" />
         <Input label="Powtórz nowe hasło" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
-        <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
           Hasła nie da się zresetować. Zapamiętaj nowe.
         </p>
         {error && (
@@ -4221,7 +4213,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
         <div className="border border-black">
           <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-black/20">
             <div className="min-w-0 flex-1">
-              <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mb-1">
+              <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 mb-1">
                 {showsPseudonym ? "Pseudonim" : "Imię i nazwisko"}
               </div>
               <div className="text-base truncate">{displayName}</div>
@@ -4232,7 +4224,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
             </button>
           </div>
           <div className="px-4 py-3">
-            <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 mb-1">Nazwa użytkownika</div>
+            <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 mb-1">Nazwa użytkownika</div>
             <div className="text-base truncate">@{user.username}</div>
           </div>
         </div>
@@ -4251,7 +4243,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
           <ToggleTile checked={animated} onChange={onToggleAnimated}
             title="Animowane tło"
             subtitle={animated ? "Włączone" : "Wyłączone"} />
-          <p className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+          <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
             Ustawienie zapisywane na tym urządzeniu.
           </p>
         </div>
@@ -4351,7 +4343,7 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
+                  <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
                 </div>
                 {/* Inline summary tags — only when we have attendance data and
                     are allowed to show it. Compact at-a-glance read of "how
@@ -4359,17 +4351,17 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
                 {canSeeAttendance && days.length > 0 && (counts.yes + counts.maybe + counts.no > 0) && (
                   <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                     {counts.yes > 0 && (
-                      <span className="font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2 py-0.5">
+                      <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">
                         {counts.yes} ✓
                       </span>
                     )}
                     {counts.maybe > 0 && (
-                      <span className="font-mono text-[10px] uppercase tracking-widest border border-black border-dashed px-2 py-0.5">
+                      <span className="font-mono text-[11px] uppercase tracking-widest border border-black border-dashed inline-flex items-center px-2 py-1 leading-none">
                         {counts.maybe} ?
                       </span>
                     )}
                     {counts.no > 0 && (
-                      <span className="font-mono text-[10px] uppercase tracking-widest border border-black px-2 py-0.5 opacity-60">
+                      <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none opacity-60">
                         {counts.no} ✕
                       </span>
                     )}
@@ -4512,12 +4504,12 @@ const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }
       </div>
 
       {savedAt && !saving && (
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60">
           Zapisano
         </div>
       )}
       {saving && (
-        <div className="font-mono text-[10px] uppercase tracking-widest opacity-60">
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60">
           Zapisywanie…
         </div>
       )}
@@ -4555,7 +4547,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-display text-sm leading-tight">{t.title}</div>
-                <div className="font-mono text-[10px] uppercase tracking-widest opacity-60 truncate">
+                <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 truncate">
                   Domyślnie: {t.icon}
                 </div>
               </div>
@@ -4673,7 +4665,7 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-[10px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
+                  <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => { setEditing(u); setModalOpen(true); }}>Edytuj</Button>
                 {u.username !== user.username && (

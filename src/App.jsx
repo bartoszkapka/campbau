@@ -496,6 +496,21 @@ const displayInitialOf = (u) => {
   return n[0]?.toUpperCase() || "?";
 };
 
+// Resolve a user's room assignment against the houses list. Returns a small
+// shape suitable for display: { houseName, roomName } when the assignment is
+// valid (both house and room still exist), or null otherwise. Stale
+// assignments — e.g. pointing to a deleted house — surface as null so the UI
+// falls back to "no room assigned" instead of showing dangling ids.
+const resolveRoom = (user, houses) => {
+  const a = user?.roomAssignment;
+  if (!a || !a.houseId || !a.roomId) return null;
+  const house = (houses || []).find(h => h.id === a.houseId);
+  if (!house) return null;
+  const room = (house.rooms || []).find(r => r.id === a.roomId);
+  if (!room) return null;
+  return { houseName: house.name, roomName: room.name };
+};
+
 // Detects when a sticky-positioned element is "stuck" to the top of the viewport.
 // Returns [stuck, setRef]. Use setRef as the `ref` prop on a 1px sentinel placed
 // just before the sticky element. The callback ref ensures the observer attaches
@@ -1895,7 +1910,7 @@ const isAttendanceComplete = (user, startDate, endDate) => {
   return true;
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpenStacja, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "", noStacjePlaceholder: "" } }) => {
+const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpenStacja, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "", noStacjePlaceholder: "" }, houses = [] }) => {
   const tiles = HOME_TILES.filter(t => {
     // Don't link the home page from itself.
     if (t.hideFromHomeRail) return false;
@@ -2029,6 +2044,28 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
                 </div>
               </>
             )}
+
+            {/* Twoje miejsce — accommodation assignment. We only render this
+                section when the admin has actually assigned a room. There's
+                no CTA when nothing is assigned: assignments are made by the
+                host, not self-served, so a prompt would be misleading. */}
+            {(() => {
+              const room = resolveRoom(user, houses);
+              if (!room) return null;
+              return (
+                <div className="mb-6">
+                  <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
+                    Twoje miejsce
+                  </div>
+                  <Card className="p-5">
+                    <div className="font-display text-2xl uppercase leading-tight">{room.houseName}</div>
+                    <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-2">
+                      Pokój: <span className="opacity-100">{room.roomName}</span>
+                    </div>
+                  </Card>
+                </div>
+              );
+            })()}
 
             {/* Twoje stacje kosmiczne — quick-access list of stations the
                 user organizes. If they don't have any, we surface a CTA
@@ -4270,7 +4307,7 @@ const ChangePasswordModal = ({ open, onClose, user, onUpdate }) => {
   );
 };
 
-const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
+const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, houses = [] }) => {
   const [festivalDates, setFestivalDates] = useState({ startDate: "", endDate: "" });
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -4367,6 +4404,23 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
             Ustawienie zapisywane na tym urządzeniu.
           </p>
         </div>
+
+        {/* Twoje miejsce — sleeping assignment, set by admin. Read-only
+            here; surfaces house + room when assigned. Hidden when nothing
+            is assigned (no point showing an empty row). */}
+        {(() => {
+          const room = resolveRoom(user, houses);
+          if (!room) return null;
+          return (
+            <div className="border-t border-black pt-5 space-y-2">
+              <div className="font-mono text-xs uppercase tracking-widest opacity-70">Twoje miejsce</div>
+              <div className="font-display text-xl uppercase leading-tight">{room.houseName}</div>
+              <div className="font-mono text-xs uppercase tracking-widest opacity-70">
+                Pokój: <span className="opacity-100">{room.roomName}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Attendance — saves directly through onUpdate (optimistic) */}
         {festivalDates.startDate && festivalDates.endDate && (
@@ -4655,6 +4709,126 @@ const HomeContentEditor = ({ content = { mottos: [], description: "", noStacjePl
   );
 };
 
+// HousesEditor — admin manages a list of houses, each with a list of rooms.
+// Houses are stored as separate records (`house:<id>`); rooms live inline
+// inside their parent house and don't have their own storage key.
+//
+// UX: one card per house showing the house name (editable on blur), a list
+// of rooms (each editable on blur with a delete button), an "add room"
+// row, and a delete-house action. Below the list, an "add house" input.
+//
+// Edits use the parent's `onCreateHouse` / `onRenameHouse` / `onDeleteHouse`
+// / `onAddRoom` / `onRenameRoom` / `onDeleteRoom` handlers, which do
+// optimistic updates with rollback on failure (see the App component).
+const HousesEditor = ({ houses = [], onCreateHouse, onRenameHouse, onDeleteHouse, onAddRoom, onRenameRoom, onDeleteRoom }) => {
+  const [draftHouse, setDraftHouse] = useState("");
+  // Drafts keyed by house id for the "add room" inputs. Lets each house
+  // have its own pending room name without a parallel state explosion.
+  const [draftRooms, setDraftRooms] = useState({});
+
+  const handleAddHouse = async () => {
+    const v = draftHouse.trim();
+    if (!v) return;
+    setDraftHouse("");
+    try { await onCreateHouse(v); } catch {}
+  };
+  const handleAddRoom = async (houseId) => {
+    const v = (draftRooms[houseId] || "").trim();
+    if (!v) return;
+    setDraftRooms(prev => ({ ...prev, [houseId]: "" }));
+    try { await onAddRoom(houseId, v); } catch {}
+  };
+  const handleDeleteHouse = async (h) => {
+    const roomCount = (h.rooms || []).length;
+    const msg = roomCount > 0
+      ? `Usunąć dom „${h.name}” razem z ${roomCount} ${roomCount === 1 ? "pokojem" : "pokojami"}? Przypisania gości do pokoi w tym domu zostaną usunięte.`
+      : `Usunąć dom „${h.name}”?`;
+    if (!window.confirm(msg)) return;
+    try { await onDeleteHouse(h.id); } catch {}
+  };
+  const handleDeleteRoom = async (houseId, room) => {
+    if (!window.confirm(`Usunąć pokój „${room.name}”? Przypisania gości do tego pokoju zostaną usunięte.`)) return;
+    try { await onDeleteRoom(houseId, room.id); } catch {}
+  };
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div>
+        <div className="font-display font-bold uppercase mb-1">Domy i pokoje</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70">
+          Dodaj domy i pokoje, w których śpią goście. Przypisania robisz potem przy każdym gościu na liście użytkowników poniżej.
+        </div>
+      </div>
+
+      {houses.length === 0 ? (
+        <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-center py-4 border border-dashed border-black">
+          Brak domów
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {houses.map(h => (
+            <div key={h.id} className="border border-black p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <input type="text" defaultValue={h.name}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== h.name) onRenameHouse(h.id, v);
+                    else if (!v) e.target.value = h.name; // reject empty
+                  }}
+                  className="flex-1 border border-black px-3 py-2 bg-white font-display text-lg" />
+                <button type="button" onClick={() => handleDeleteHouse(h)}
+                  className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 hover:bg-black hover:text-white">
+                  Usuń dom
+                </button>
+              </div>
+
+              {(h.rooms || []).length > 0 && (
+                <div className="space-y-2 pl-3 border-l-2 border-black/30">
+                  {h.rooms.map(r => (
+                    <div key={r.id} className="flex items-center gap-2">
+                      <input type="text" defaultValue={r.name}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v && v !== r.name) onRenameRoom(h.id, r.id, v);
+                          else if (!v) e.target.value = r.name;
+                        }}
+                        className="flex-1 border border-black px-3 py-2 bg-white" />
+                      <button type="button" onClick={() => handleDeleteRoom(h.id, r)}
+                        className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 hover:bg-black hover:text-white">
+                        Usuń
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pl-3">
+                <input type="text" value={draftRooms[h.id] || ""}
+                  onChange={(e) => setDraftRooms(prev => ({ ...prev, [h.id]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddRoom(h.id); } }}
+                  placeholder="Dodaj pokój"
+                  className="flex-1 border border-black px-3 py-2 bg-white" />
+                <Button size="sm" onClick={() => handleAddRoom(h.id)} disabled={!(draftRooms[h.id] || "").trim()}>+ Dodaj</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="border-t border-black pt-4">
+        <div className="flex items-center gap-2">
+          <input type="text" value={draftHouse}
+            onChange={(e) => setDraftHouse(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddHouse(); } }}
+            placeholder="Dodaj dom"
+            className="flex-1 border border-black px-3 py-2 bg-white" />
+          <Button size="sm" onClick={handleAddHouse} disabled={!draftHouse.trim()}>+ Dodaj dom</Button>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
 const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   const [savingId, setSavingId] = useState(null);
   const handleChange = async (id, value) => {
@@ -4710,7 +4884,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   );
 };
 
-const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon, homeContent = { mottos: [], description: "", noStacjePlaceholder: "" }, onSaveHomeContent }) => {
+const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon, homeContent = { mottos: [], description: "", noStacjePlaceholder: "" }, onSaveHomeContent, houses = [], onCreateHouse, onRenameHouse, onDeleteHouse, onAddRoom, onRenameRoom, onDeleteRoom, onAssignRoom }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -4788,34 +4962,126 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
         </Card>
         <HomeContentEditor content={homeContent} onSave={onSaveHomeContent} />
         <HomeTilesEditor overrides={homeTilesOverrides} onSave={onSaveHomeTileIcon} />
+        <HousesEditor houses={houses}
+          onCreateHouse={onCreateHouse} onRenameHouse={onRenameHouse} onDeleteHouse={onDeleteHouse}
+          onAddRoom={onAddRoom} onRenameRoom={onRenameRoom} onDeleteRoom={onDeleteRoom} />
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-bold uppercase">Użytkownicy ({users.length})</h2>
             <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Dodaj</Button>
           </div>
-          <div className="space-y-2">
-            {users.map(u => (
-              <div key={u.id} className="flex items-center gap-3 border border-black p-3">
-                <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
-                  {u.profilePicture
-                    ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(u)}</div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-xs uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => { setEditing(u); setModalOpen(true); }}>Edytuj</Button>
-                {u.username !== user.username && (
-                  <Button variant="outline" size="sm" onClick={() => remove(u)}>Usuń</Button>
-                )}
-              </div>
-            ))}
-          </div>
+          {/* Track which house the admin has selected per-user-row, even
+              before they pick a room. Without this, picking "Dom Goździka"
+              but not yet picking a room would leave nothing persisted, and
+              the second select would reset to disabled on next render. */}
+          <UsersListWithRoomAssignment users={users} houses={houses}
+            currentUser={user}
+            onEdit={(u) => { setEditing(u); setModalOpen(true); }}
+            onRemove={remove}
+            onAssignRoom={onAssignRoom} />
         </div>
       </div>
       <UserEditModal open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }}
         editing={editing} onSave={save} />
+    </div>
+  );
+};
+
+// Users list inside AdminView, with per-row room-assignment dropdowns.
+// Pulled out into its own component so we can keep a "pending house" state
+// per user without polluting the parent. The pending state is needed so the
+// admin can pick a house first, then a room — without it, the partial
+// selection (house only) would reset on each render because the persisted
+// roomAssignment is treated as null until both ids are present.
+const UsersListWithRoomAssignment = ({ users, houses, currentUser, onEdit, onRemove, onAssignRoom }) => {
+  // pendingHouse[userId] = houseId chosen but not yet finalized with a room.
+  // Wiped after the room is picked (the persisted assignment carries the
+  // houseId from then on).
+  const [pendingHouse, setPendingHouse] = useState({});
+
+  return (
+    <div className="space-y-2">
+      {users.map(u => {
+        const a = u.roomAssignment || {};
+        // Effective houseId: persisted assignment first, otherwise a pending
+        // selection. Lets the second select know which room list to show.
+        const effectiveHouseId = a.houseId || pendingHouse[u.id] || "";
+        const selectedHouse = houses.find(h => h.id === effectiveHouseId);
+        const roomOptions = selectedHouse ? (selectedHouse.rooms || []) : [];
+        return (
+          <div key={u.id} className="border border-black p-3 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
+                {u.profilePicture
+                  ? <img src={u.profilePicture} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(u)}</div>}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
+                <div className="font-mono text-xs uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => onEdit(u)}>Edytuj</Button>
+              {u.username !== currentUser.username && (
+                <Button variant="outline" size="sm" onClick={() => onRemove(u)}>Usuń</Button>
+              )}
+            </div>
+
+            {houses.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select value={effectiveHouseId}
+                  onChange={(e) => {
+                    const houseId = e.target.value || null;
+                    if (!houseId) {
+                      // Clearing the house clears any pending state and
+                      // wipes the persisted assignment.
+                      setPendingHouse(prev => {
+                        const { [u.id]: _, ...rest } = prev;
+                        return rest;
+                      });
+                      onAssignRoom(u.id, null);
+                    } else if (houseId !== a.houseId) {
+                      // New house picked — stash it locally and clear any
+                      // existing assignment so the room-select reflects the
+                      // new house's rooms (not the stale ones).
+                      setPendingHouse(prev => ({ ...prev, [u.id]: houseId }));
+                      if (a.roomId) onAssignRoom(u.id, null);
+                    }
+                  }}
+                  className="border border-black px-3 py-2 bg-white font-mono text-xs uppercase tracking-widest">
+                  <option value="">— bez przydziału —</option>
+                  {houses.map(h => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
+                  ))}
+                </select>
+                <select value={a.roomId || ""}
+                  disabled={!effectiveHouseId || roomOptions.length === 0}
+                  onChange={(e) => {
+                    const roomId = e.target.value || null;
+                    if (!roomId) {
+                      onAssignRoom(u.id, null);
+                    } else {
+                      onAssignRoom(u.id, { houseId: effectiveHouseId, roomId });
+                      // Clear the pending state — the persisted assignment
+                      // now carries the houseId.
+                      setPendingHouse(prev => {
+                        const { [u.id]: _, ...rest } = prev;
+                        return rest;
+                      });
+                    }
+                  }}
+                  className="border border-black px-3 py-2 bg-white font-mono text-xs uppercase tracking-widest disabled:opacity-50">
+                  <option value="">
+                    {!effectiveHouseId ? "Wybierz dom" : roomOptions.length === 0 ? "Brak pokoi" : "— bez pokoju —"}
+                  </option>
+                  {roomOptions.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -4887,6 +5153,11 @@ export default function App() {
   // when a user has no stacje kosmiczne yet. All managed by admin via the
   // admin page; persisted at storage key `home_content`.
   const [homeContent, setHomeContent] = useState({ mottos: [], description: "", noStacjePlaceholder: "" });
+  // Houses (with their rooms inline) are managed by admin and used to
+  // assign each guest a sleeping spot. Loaded as a list via getAll("house:").
+  // Each house: { id, name, rooms: [{ id, name }] }. Room assignments live
+  // on the user record under user.roomAssignment = { houseId, roomId }.
+  const [houses, setHouses] = useState([]);
   const [stacjeRefreshKey, setStacjeRefreshKey] = useState(0);
 
   // Router integration
@@ -5041,7 +5312,7 @@ export default function App() {
 
     // The set of prefixes the rest of the app reads via getAll/get. When we
     // revalidate one, any open view watching for storage:refresh re-renders.
-    const prefixes = ["user:", "wydarzenie:", "stacja:", "fsection:"];
+    const prefixes = ["user:", "wydarzenie:", "stacja:", "fsection:", "house:"];
     // Detect whether the user is actively interacting. If so, we postpone
     // any non-essential refresh — text selection, focused inputs, and the
     // file-upload-in-flight all break when the parent re-renders mid-action.
@@ -5114,6 +5385,10 @@ export default function App() {
         if (isUserBusy()) return;
         loadUsers();
       }
+      if (ck.startsWith("getAll:house:") || ck.startsWith("get:house:")) {
+        if (isUserBusy()) return;
+        loadHouses();
+      }
     };
     window.addEventListener("storage:refresh", onStorageRefresh);
 
@@ -5136,7 +5411,7 @@ export default function App() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", refreshAll);
     };
-  }, [user, loadUsers]);
+  }, [user, loadUsers, loadHouses]);
 
   // Restore session on init
   useEffect(() => {
@@ -5312,6 +5587,164 @@ export default function App() {
     }
   };
 
+  // Houses + rooms management. Admin-only handlers; the View consumes the
+  // `houses` array and calls these for mutations. Optimistic updates with
+  // rollback on storage error.
+  const loadHouses = useCallback(async () => {
+    try {
+      const list = await storage.getAll("house:");
+      setHouses(prev => sameJSONLocal(prev, list) ? prev : list);
+    } catch (err) {
+      console.warn("loadHouses failed", err);
+    }
+  }, []);
+  // Local copy of the equality check used in the polling effect — keeps
+  // this handler self-contained.
+  const sameJSONLocal = (a, b) => {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+  };
+  // Initial load + reload on visibility/focus.
+  useEffect(() => {
+    if (!user) return;
+    loadHouses();
+  }, [user, loadHouses]);
+
+  const onCreateHouse = async (name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    const id = uid();
+    const next = { id, name: trimmed, rooms: [] };
+    setHouses(prev => [...prev, next]);
+    try {
+      await storage.set("house:" + id, next);
+    } catch (err) {
+      setHouses(prev => prev.filter(h => h.id !== id));
+      throw err;
+    }
+  };
+
+  const onRenameHouse = async (id, name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    const prev = houses;
+    const found = prev.find(h => h.id === id);
+    if (!found) return;
+    const next = { ...found, name: trimmed };
+    setHouses(prev.map(h => h.id === id ? next : h));
+    try {
+      await storage.set("house:" + id, next);
+    } catch (err) {
+      setHouses(prev);
+      throw err;
+    }
+  };
+
+  const onDeleteHouse = async (id) => {
+    const prev = houses;
+    setHouses(prev.filter(h => h.id !== id));
+    try {
+      await storage.delete("house:" + id);
+      // Also clear any user assignments pointing to this house. We do this
+      // best-effort — if a user write fails, the home/profile UI will fall
+      // back to "no assignment" because the house lookup misses anyway.
+      const affected = users.filter(u => u.roomAssignment?.houseId === id);
+      for (const u of affected) {
+        const next = { ...u, roomAssignment: null };
+        try { await storage.set("user:" + u.username, next); } catch {}
+      }
+      if (affected.length > 0) loadUsers();
+    } catch (err) {
+      setHouses(prev);
+      throw err;
+    }
+  };
+
+  // Add or rename a room. Rooms live inline on their house; we re-write the
+  // whole house record on each change.
+  const onAddRoom = async (houseId, roomName) => {
+    const trimmed = String(roomName || "").trim();
+    if (!trimmed) return;
+    const prev = houses;
+    const house = prev.find(h => h.id === houseId);
+    if (!house) return;
+    const room = { id: uid(), name: trimmed };
+    const nextHouse = { ...house, rooms: [...(house.rooms || []), room] };
+    setHouses(prev.map(h => h.id === houseId ? nextHouse : h));
+    try {
+      await storage.set("house:" + houseId, nextHouse);
+    } catch (err) {
+      setHouses(prev);
+      throw err;
+    }
+  };
+
+  const onRenameRoom = async (houseId, roomId, name) => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) return;
+    const prev = houses;
+    const house = prev.find(h => h.id === houseId);
+    if (!house) return;
+    const nextHouse = {
+      ...house,
+      rooms: (house.rooms || []).map(r => r.id === roomId ? { ...r, name: trimmed } : r),
+    };
+    setHouses(prev.map(h => h.id === houseId ? nextHouse : h));
+    try {
+      await storage.set("house:" + houseId, nextHouse);
+    } catch (err) {
+      setHouses(prev);
+      throw err;
+    }
+  };
+
+  const onDeleteRoom = async (houseId, roomId) => {
+    const prev = houses;
+    const house = prev.find(h => h.id === houseId);
+    if (!house) return;
+    const nextHouse = { ...house, rooms: (house.rooms || []).filter(r => r.id !== roomId) };
+    setHouses(prev.map(h => h.id === houseId ? nextHouse : h));
+    try {
+      await storage.set("house:" + houseId, nextHouse);
+      // Clear assignments pointing to this room
+      const affected = users.filter(u =>
+        u.roomAssignment?.houseId === houseId && u.roomAssignment?.roomId === roomId
+      );
+      for (const u of affected) {
+        const next = { ...u, roomAssignment: null };
+        try { await storage.set("user:" + u.username, next); } catch {}
+      }
+      if (affected.length > 0) loadUsers();
+    } catch (err) {
+      setHouses(prev);
+      throw err;
+    }
+  };
+
+  // Assign or clear a user's room. Pass { houseId: null, roomId: null } (or
+  // null) to clear. We write to the user record and update local users state
+  // optimistically.
+  const onAssignRoom = async (userId, assignment) => {
+    const target = users.find(u => u.id === userId);
+    if (!target) return;
+    const valid = assignment && assignment.houseId && assignment.roomId
+      ? { houseId: assignment.houseId, roomId: assignment.roomId }
+      : null;
+    const next = { ...target, roomAssignment: valid };
+    const prev = users;
+    setUsers(users.map(u => u.id === userId ? next : u));
+    try {
+      await storage.set("user:" + target.username, next);
+      // If this is the current user, update them too so home/profile updates
+      // immediately without waiting for loadUsers.
+      if (user && user.id === userId) {
+        setUser(next);
+      }
+    } catch (err) {
+      setUsers(prev);
+      throw err;
+    }
+  };
+
   const navigate = (v) => {
     const path = VIEW_TO_PATH[v] || "/";
     routerNavigate(path);
@@ -5398,7 +5831,8 @@ export default function App() {
               <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate}
                 onOpenWydarzenie={openWydarzenieDetail} onOpenStacja={openStacjaDetail}
                 onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides}
-                attendanceDeadline={attendanceDeadline} homeContent={homeContent} />
+                attendanceDeadline={attendanceDeadline} homeContent={homeContent}
+                houses={houses} />
             } />
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />
@@ -5412,7 +5846,8 @@ export default function App() {
             <Route path="/miejsce" element={<MiejsceView user={user} onUpdate={onUpdateUser} />} />
             <Route path="/profil" element={
               <ProfileView user={user} onUpdate={onUpdateUser}
-                animated={animated} onToggleAnimated={toggleAnimated} />
+                animated={animated} onToggleAnimated={toggleAnimated}
+                houses={houses} />
             } />
             <Route path="/goscie" element={
               user.role === "admin" || guestListVisible
@@ -5427,7 +5862,10 @@ export default function App() {
                     attendanceVisible={attendanceVisible} onToggleAttendance={onToggleAttendance}
                     attendanceDeadline={attendanceDeadline} onSaveAttendanceDeadline={onSaveAttendanceDeadline}
                     homeTilesOverrides={homeTilesOverrides} onSaveHomeTileIcon={onSaveHomeTileIcon}
-                    homeContent={homeContent} onSaveHomeContent={onSaveHomeContent} />
+                    homeContent={homeContent} onSaveHomeContent={onSaveHomeContent}
+                    houses={houses} onCreateHouse={onCreateHouse} onRenameHouse={onRenameHouse} onDeleteHouse={onDeleteHouse}
+                    onAddRoom={onAddRoom} onRenameRoom={onRenameRoom} onDeleteRoom={onDeleteRoom}
+                    onAssignRoom={onAssignRoom} />
                 : <EmptyState message="Brak dostępu" />
             } />
             <Route path="*" element={<Navigate to="/" replace />} />

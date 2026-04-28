@@ -805,6 +805,11 @@ const ToggleTile = ({ checked, onChange, emoji, title, subtitle, disabled = fals
 // and lands on its target. Whitespace and punctuation pass through stably,
 // mirroring how real boards keep punctuation flaps still while letters cycle.
 //
+// When the target changes, characters that already match between the old
+// display and the new target stay still — only the positions that need to
+// change spin. This makes mid-rotation transitions read as "the letters that
+// need to move are moving," instead of every character resetting to random.
+//
 // Implementation notes:
 //   - Animation state lives in a ref so re-renders don't reset timing.
 //   - One state variable (the displayed string); each tick recomputes from
@@ -812,10 +817,12 @@ const ToggleTile = ({ checked, onChange, emoji, title, subtitle, disabled = fals
 //     closures.
 //   - Tick interval ~60ms (between 50-80ms reads as a real flapper board;
 //     faster is too slick, slower looks broken).
-//   - Random chars are uppercase Latin + Polish diacritics + digits, since
-//     mottos read better in uppercase and the display visually evokes a
-//     train-station board.
-const FLIP_RANDOM_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZĄĆĘŁŃÓŚŻŹ0123456789";
+//   - Random chars are ASCII uppercase + digits only. We tried including
+//     Polish diacritics (Ą Ć Ę Ł Ń Ó Ś Ż Ź) but at small font sizes the
+//     combining marks visibly drift while the spans flip, producing floating
+//     accent glyphs. Diacritics in the *target* render fine because they're
+//     stable graphemes; we just don't shuffle through them.
+const FLIP_RANDOM_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const flipRandomChar = () => FLIP_RANDOM_CHARS[Math.floor(Math.random() * FLIP_RANDOM_CHARS.length)];
 // Whitespace and punctuation don't shuffle — they read as stable framing.
 const isStableChar = (c) => /^[\s\-—–.,!?:;'"„"()/]$/.test(c);
@@ -825,31 +832,63 @@ const FlipBoard = ({ text, className = "" }) => {
   // aria-label so screen readers get the right casing.
   const target = (text || "").toUpperCase();
   const [display, setDisplay] = useState(target);
+  // Hold the currently-displayed string in a ref alongside animation state
+  // so when target changes we can preserve already-correct characters
+  // instead of resetting everything to random.
+  const displayRef = useRef(target);
   const animRef = useRef({ targets: [], settleAts: [], startTime: 0 });
 
   useEffect(() => {
     const targets = Array.from(target);
     if (targets.length === 0) {
       setDisplay("");
+      displayRef.current = "";
       return;
     }
+    // Take the previous display chars as the starting point. If the new
+    // target is shorter or longer, pad/truncate so positions align.
+    const prevChars = Array.from(displayRef.current);
     // Per-char settle time. Variety in timing gives the airport-board its
-    // character — letters land in waves, not in sync.
-    const settleAts = targets.map(() => 200 + Math.random() * 1500);
-    animRef.current = { targets, settleAts, startTime: performance.now() };
-    setDisplay(targets.map(c => isStableChar(c) ? c : flipRandomChar()).join(""));
+    // character — letters land in waves, not in sync. Positions where
+    // prev[i] already equals the target settle immediately (effective
+    // settleAt = 0) so they don't spin.
+    const now = performance.now();
+    const settleAts = targets.map((tc, i) => {
+      const prev = prevChars[i];
+      if (isStableChar(tc)) return 0;
+      if (prev === tc) return 0;
+      return 200 + Math.random() * 1500;
+    });
+    animRef.current = { targets, settleAts, startTime: now };
+
+    // Initial frame: keep prev chars where they exist; for new positions
+    // (longer target) spin from a random char. Positions that need to
+    // change keep their current letter for the very first frame, then
+    // start shuffling on the next tick — looks like the letter "lifts off"
+    // rather than instantly disappearing.
+    const initial = targets.map((tc, i) => {
+      if (isStableChar(tc)) return tc;
+      const prev = prevChars[i];
+      if (prev === tc) return tc;
+      return prev !== undefined ? prev : flipRandomChar();
+    });
+    const initialStr = initial.join("");
+    setDisplay(initialStr);
+    displayRef.current = initialStr;
 
     const id = setInterval(() => {
       const { targets, settleAts, startTime } = animRef.current;
-      const now = performance.now();
+      const t = performance.now();
       let allSettled = true;
       const next = targets.map((tc, i) => {
         if (isStableChar(tc)) return tc;
-        if (now - startTime >= settleAts[i]) return tc;
+        if (t - startTime >= settleAts[i]) return tc;
         allSettled = false;
         return flipRandomChar();
       });
-      setDisplay(next.join(""));
+      const nextStr = next.join("");
+      setDisplay(nextStr);
+      displayRef.current = nextStr;
       if (allSettled) clearInterval(id);
     }, 60);
 
@@ -1897,7 +1936,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
               <div className="mb-6">
                 <FlipBoard
                   text={currentMotto}
-                  className="font-display block text-3xl sm:text-4xl lg:text-5xl leading-[0.95] tracking-tight" />
+                  className="font-display block text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight" />
               </div>
             )}
             {homeContent.description && (
@@ -1942,16 +1981,15 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
           <div className="lg:col-span-1">
             {/* Page tiles. Mobile: 1 col, sm: 2 cols, lg: 1 col (it's in the
                 33% right sidebar so two side-by-side tiles would be too narrow). */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-1">
               {tiles.map(t => {
                 const icon = homeTilesOverrides[t.id] || t.icon;
                 return (
                   <button key={t.id} onClick={() => onNavigate(t.id)}
-                    className="border border-black p-4 text-left hover:bg-black hover:text-white transition-colors group min-h-[96px] flex items-center gap-4">
-                    <div className="text-4xl leading-none shrink-0 emoji-mono">{icon}</div>
+                    className="text-left hover:bg-black hover:text-white transition-colors group flex items-center gap-3 px-2 py-2">
+                    <div className="text-2xl leading-none shrink-0 emoji-mono">{icon}</div>
                     <div className="min-w-0">
-                      <div className="font-display text-lg mb-1 leading-tight">{t.title}</div>
-                      <div className="font-mono text-[10px] uppercase tracking-widest opacity-70 group-hover:opacity-100">{t.desc}</div>
+                      <div className="font-display text-sm leading-tight">{t.title}</div>
                     </div>
                   </button>
                 );

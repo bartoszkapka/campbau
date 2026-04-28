@@ -332,8 +332,8 @@ const GlobalStyles = () => (
        text-base callsites that don't specify their own size pick up a
        slightly larger, more readable default. Line-height is generous
        for paragraph readability without feeling sparse. */
-    .prose-simple { font-size: 1.0625rem; line-height: 1.65; }
-    @media (min-width: 640px) { .prose-simple { font-size: 1.125rem; } }
+    .prose-simple { font-size: 1.125rem; line-height: 1.65; }
+    @media (min-width: 640px) { .prose-simple { font-size: 1.1875rem; } }
     .prose-simple p { margin: 0 0 0.85em 0; }
     .prose-simple p:last-child { margin-bottom: 0; }
     .prose-simple strong { font-weight: 700; }
@@ -799,7 +799,7 @@ const ToggleTile = ({ checked, onChange, emoji, title, subtitle, disabled = fals
           <span className={titleClass}>{title}</span>
         </div>
         {subtitle && (
-          <div className={`font-mono text-[11px] uppercase tracking-widest mt-1 ${checked ? "opacity-80" : "opacity-60"}`}>
+          <div className={`font-mono text-xs uppercase tracking-widest mt-1 ${checked ? "opacity-80" : "opacity-60"}`}>
             {subtitle}
           </div>
         )}
@@ -945,7 +945,7 @@ const ErrorToast = () => {
     <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-md z-[100] space-y-2 pointer-events-none">
       {errors.map(e => (
         <div key={e.id} className="bg-black text-white border border-black p-3 fade-in pointer-events-auto">
-          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-1">
+          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-1">
             Błąd zapisu {e.op && `· ${e.op}`} {e.key && `· ${e.key}`}
           </div>
           <div className="text-sm break-words">{e.message}</div>
@@ -1116,7 +1116,7 @@ const LoginView = ({ onLogin, initError }) => {
             spellCheck={false}
             required />
           {error && <div className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 bg-white/50">{error}</div>}
-          {initError && !error && <div className="font-mono text-[11px] uppercase tracking-widest border border-black px-3 py-2 bg-white/50">Init: {initError}</div>}
+          {initError && !error && <div className="font-mono text-xs uppercase tracking-widest border border-black px-3 py-2 bg-white/50">Init: {initError}</div>}
           <button type="submit"
             onClick={doLogin}
             disabled={loading}
@@ -1124,7 +1124,7 @@ const LoginView = ({ onLogin, initError }) => {
             {loading ? "..." : "Wejdź"}
           </button>
         </form>
-        <p className="font-mono text-[11px] uppercase tracking-widest text-center mt-8 opacity-60">
+        <p className="font-mono text-xs uppercase tracking-widest text-center mt-8 opacity-60">
           Dostęp tylko dla uczestników
         </p>
       </div>
@@ -1286,7 +1286,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-display truncate">{displayNameOf(user)}</div>
-              <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 truncate">@{user.username}{user.role === "admin" && " · admin"}</div>
+              <div className="font-mono text-xs uppercase tracking-widest opacity-60 truncate">@{user.username}{user.role === "admin" && " · admin"}</div>
             </div>
             <div className="font-mono text-xs uppercase tracking-widest opacity-50 shrink-0">Profil →</div>
           </button>
@@ -1572,11 +1572,11 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
       {/* Header row — date/location on left, moon in upper right */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <span className="font-mono text-[11px] uppercase tracking-widest opacity-70">{todayStr}</span>
+          <span className="font-mono text-xs uppercase tracking-widest opacity-70">{todayStr}</span>
           {locationName && (
             <>
-              <span className="font-mono text-[11px] opacity-40">·</span>
-              <span className="font-mono text-[11px] uppercase tracking-widest opacity-60 truncate">{locationName}</span>
+              <span className="font-mono text-xs opacity-40">·</span>
+              <span className="font-mono text-xs uppercase tracking-widest opacity-60 truncate">{locationName}</span>
             </>
           )}
         </div>
@@ -1685,14 +1685,14 @@ const PwaInstallBanner = () => {
         <div className="text-3xl shrink-0 emoji-mono">📲</div>
         <div className="flex-1 min-w-0">
           <div className="font-display text-base">Zainstaluj aplikację</div>
-          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-0.5">
+          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-0.5">
             Szybszy dostęp z ekranu głównego
           </div>
         </div>
         <div className="flex flex-col gap-2 shrink-0">
           <Button size="sm" onClick={install}>Zainstaluj</Button>
           <button onClick={dismiss}
-            className="font-mono text-[11px] uppercase tracking-widest opacity-60 hover:opacity-100">
+            className="font-mono text-xs uppercase tracking-widest opacity-60 hover:opacity-100">
             Później
           </button>
         </div>
@@ -1708,7 +1708,7 @@ const PwaInstallBanner = () => {
               <li>Upewnij się, że przełącznik <strong>"Otwórz jako aplikację"</strong> jest włączony (zielony) — domyślnie jest.</li>
               <li>Stuknij <strong>"Dodaj"</strong> w prawym górnym rogu.</li>
             </ol>
-            <p className="font-mono text-[11px] uppercase tracking-widest opacity-60 pt-2">
+            <p className="font-mono text-xs uppercase tracking-widest opacity-60 pt-2">
               Aplikacja pojawi się obok innych ikon i otworzy się bez paska przeglądarki — w trybie pełnoekranowym.
             </p>
             <Button onClick={() => setShowIosHint(false)} className="w-full">OK</Button>
@@ -1802,8 +1802,8 @@ const NextEventCountdown = ({ events, onOpen }) => {
     <div className={`border border-black p-5 mb-6 ${inPast ? "bg-black text-white" : ""} ${onOpen ? "cursor-pointer hover:bg-black hover:text-white transition-colors" : ""}`}
       onClick={onOpen ? () => onOpen(e.id) : undefined}>
       <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">{headerLabel}</div>
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70">{headerLabel}</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70">
           {formatDate(e.date, e.time)}
         </div>
       </div>
@@ -1826,7 +1826,7 @@ const NextEventCountdown = ({ events, onOpen }) => {
         </div>
       </div>
       {inPast && (
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-3">
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-3">
           Wydarzenie się rozpoczęło
         </div>
       )}
@@ -1865,7 +1865,7 @@ const AttendancePrompt = ({ user, startDate, endDate, onNavigate }) => {
         <div className="text-2xl emoji-mono shrink-0">📅</div>
         <div className="flex-1 min-w-0">
           <div className="font-display text-base mb-1">Zaznacz swoją obecność</div>
-          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-3">
+          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
             {unmarked.length === days.length
               ? "Daj znać, w które dni planujesz przyjechać"
               : `Pozostało do zaznaczenia: ${unmarked.length} ${unmarked.length === 1 ? "dzień" : "dni"}`}
@@ -1895,7 +1895,7 @@ const isAttendanceComplete = (user, startDate, endDate) => {
   return true;
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpenStacja, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "" } }) => {
+const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpenStacja, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "", noStacjePlaceholder: "" } }) => {
   const tiles = HOME_TILES.filter(t => {
     // Don't link the home page from itself.
     if (t.hideFromHomeRail) return false;
@@ -2012,7 +2012,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
                 {nothingMarked && (
                   <Card className="p-5 mb-4">
                     <div className="font-display font-bold uppercase mb-2">Potwierdź obecność</div>
-                    <p className="text-sm">
+                    <p className="text-base">
                       Daj znać, czy będziesz na festiwalu. Wystarczy potwierdzić, że <strong>w ogóle przyjedziesz</strong> lub że <strong>nie dasz rady</strong>.
                       Konkretne dni (i to, czy zostajesz na cały weekend, czy tylko na część) możesz dograć później —
                       wystarczy że zaznaczysz cokolwiek poniżej, a komunikat zniknie.
@@ -2034,7 +2034,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
                 user organizes. If they don't have any, we surface a CTA
                 instead so they can create one in one tap. */}
             <div className="mb-6">
-              <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-3">
+              <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
                 Twoje stacje kosmiczne
               </div>
               {myStacje.length > 0 ? (
@@ -2045,7 +2045,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
                       <div className="text-3xl leading-none shrink-0 emoji-mono">{s.icon || "🛸"}</div>
                       <div className="min-w-0 flex-1">
                         <div className="font-display font-bold truncate">{s.title}</div>
-                        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">
+                        <div className="font-mono text-xs uppercase tracking-widest opacity-70">
                           {s.date ? formatDate(s.date, s.time) : (s.dateSuggestion ? `Sugestia: ${s.dateSuggestion}` : "Data do ustalenia")}
                         </div>
                       </div>
@@ -2054,10 +2054,12 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
                 </div>
               ) : (
                 <Card className="p-5">
-                  <p className="text-sm mb-3">
-                    Nie prowadzisz jeszcze żadnej stacji kosmicznej. Stacja to coś, co chcesz zrobić, pokazać albo poprowadzić w czasie festiwalu — warsztat, mała ceremonia, gra, pokaz, cokolwiek.
+                  <p className="text-base mb-3">
+                    {homeContent.noStacjePlaceholder
+                      ? renderRichText(homeContent.noStacjePlaceholder)
+                      : "Nie prowadzisz jeszcze żadnej stacji kosmicznej. Stacja to coś, co chcesz zrobić, pokazać albo poprowadzić w czasie festiwalu — warsztat, mała ceremonia, gra, pokaz, cokolwiek."}
                   </p>
-                  <Button size="sm" onClick={() => onNavigate("stacje")}>+ Załóż swoją stację</Button>
+                  <Button size="sm" onClick={() => onNavigate("stacje")}>+ Dodaj Stację Kosmiczną</Button>
                 </Card>
               )}
             </div>
@@ -2152,7 +2154,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
           <div className="relative">
             {isAdmin && (
               <button onClick={() => setIntroOpen(true)}
-                className="absolute top-0 right-0 font-mono text-[11px] uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
+                className="absolute top-0 right-0 font-mono text-xs uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
                 Edytuj
               </button>
             )}
@@ -2176,7 +2178,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
           <>
             {!listVisible && isAdmin && (
               <div className="px-5 mb-3">
-                <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 border border-dashed border-black px-3 py-2">
+                <div className="font-mono text-xs uppercase tracking-widest opacity-60 border border-dashed border-black px-3 py-2">
                   Lista jest ukryta dla gości — widzisz ją jako admin
                 </div>
               </div>
@@ -2223,7 +2225,7 @@ const StacjeIntroModal = ({ open, onClose, initial, onSave }) => {
     <Modal open={open} onClose={onClose} title="Edytuj wstęp">
       <form onSubmit={submit} className="space-y-4">
         <Textarea label="Tekst wstępu" value={text} onChange={e => setText(e.target.value)} rows={6} />
-        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
         <div className="flex gap-3">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -2306,14 +2308,16 @@ const StacjaCard = ({ item, users, mystery, onClick, onAdminDelete }) => {
       )}
       <div className="p-4 flex-1 min-w-0 flex flex-col">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
-          {dateLine && <span className="font-mono text-[11px] uppercase tracking-widest opacity-70">{dateLine}</span>}
+          {item.visibility !== "public" && (
+            <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
+          )}
+          {dateLine && <span className="font-mono text-xs uppercase tracking-widest opacity-70">{dateLine}</span>}
         </div>
         <h3 className="font-display text-lg mb-1 leading-tight">
           {item.image && item.icon && <span className="mr-2 emoji-mono">{item.icon}</span>}{item.title}
         </h3>
         {item.description && <p className="text-sm opacity-80 line-clamp-2 mb-2">{item.description}</p>}
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 mt-auto">
+        <div className="font-mono text-xs uppercase tracking-widest opacity-60 mt-auto">
           {ownerNames}{item.owners?.length > 3 && ` +${item.owners.length - 3}`}
         </div>
       </div>
@@ -2396,7 +2400,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
               onChange={e => update("dateSuggestion", e.target.value)}
               placeholder="np. piątek wieczorem" />
             {!isAdmin && (
-              <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
+              <p className="font-mono text-xs uppercase tracking-widest opacity-60">
                 Tylko Bau może wyznaczyć ostateczną datę i godzinę. Twoja sugestia jest widoczna dla wszystkich.
               </p>
             )}
@@ -2417,7 +2421,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
                 <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
                   className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                   <div className="font-display text-sm">{opt.title}</div>
-                  <div className={`font-mono text-[11px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                  <div className={`font-mono text-xs uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
                 </button>
               );
             })}
@@ -2475,7 +2479,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
         </div>
         <div className="px-5 pt-10 flex flex-col items-center text-center">
           <div className="text-7xl emoji-mono mb-6">🔒</div>
-          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
+          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-2">Stacja kosmiczna</div>
           <h1 className="font-display text-4xl sm:text-5xl font-bold uppercase mb-4">???</h1>
           <p className="font-mono text-xs uppercase tracking-widest opacity-60 max-w-sm">
             Szczegóły pojawią się wkrótce
@@ -2534,29 +2538,33 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
       <div className="px-5 pt-5">
         <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
       </div>
-      {item.image ? (
-        <div className="mt-5 mx-5 border border-black">
-          <img src={item.image} alt="" className="w-full h-64 sm:h-80 object-cover block" />
-        </div>
-      ) : item.icon ? (
-        <div className="mt-5 mx-5 border border-black h-64 sm:h-80 flex items-center justify-center bg-black/5">
-          <span className="text-8xl sm:text-9xl emoji-mono">{item.icon}</span>
-        </div>
-      ) : null}
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
-          <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
-          {dateLine && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{dateLine}</span>}
+          {item.visibility !== "public" && (
+            <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
+          )}
+          {dateLine && <span className="font-mono text-sm uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{dateLine}</span>}
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-6">
+        <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] mb-6">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
-        {/* Two-column grid on lg+: main content (description, edit/delete
-            actions) on the left, narrower aside on the right with the
-            organizer roster. Mobile stacks naturally — main column first,
-            then aside, both full-width. */}
+        {/* Two-column grid on lg+: main column has the image, description,
+            and edit/delete actions; aside has the organizer roster. Mobile
+            stacks naturally — image first, then text and actions, then the
+            aside. The image is full-width inside whichever column contains
+            it; on desktop that's the wider main column, on mobile it's the
+            full content area. */}
         <div className="lg:grid lg:grid-cols-3 lg:gap-8">
           <div className="lg:col-span-2">
+            {item.image ? (
+              <div className="border border-black mb-6">
+                <img src={item.image} alt="" className="w-full h-64 sm:h-80 lg:h-96 object-cover block" />
+              </div>
+            ) : item.icon ? (
+              <div className="border border-black h-64 sm:h-80 lg:h-96 flex items-center justify-center bg-black/5 mb-6">
+                <span className="text-8xl sm:text-9xl emoji-mono">{item.icon}</span>
+              </div>
+            ) : null}
             {item.description && <div className="prose-simple mb-6">{renderRichText(item.description)}</div>}
             {canEdit && (
               <div className="flex gap-3 mt-6">
@@ -2582,7 +2590,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-bold truncate">{displayNameOf(o)}</div>
-                    <div className="font-mono text-[11px] uppercase opacity-60">@{o.username}</div>
+                    <div className="font-mono text-xs uppercase opacity-60">@{o.username}</div>
                   </div>
                   {canEdit && owners.length > 1 && (
                     <button onClick={() => removeCoOwner(o.id)} className="font-mono text-xs uppercase border border-black px-2 py-1">Usuń</button>
@@ -2609,7 +2617,7 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                    <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}</div>
+                    <div className="font-mono text-xs uppercase opacity-60">@{u.username}</div>
                   </div>
                 </button>
               ))}
@@ -2828,11 +2836,11 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         ) : null}
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex flex-col">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            {it._type === "stacja" && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Stacja kosmiczna</span>}
-                            {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Tylko admin</span>}
-                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Zapisy</span>}
-                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Kosmobus</span>}
-                            {it.time && <span className="font-mono text-[11px] uppercase tracking-widest opacity-70">{it.time.slice(0, 5)}</span>}
+                            {it._type === "stacja" && <span className="font-mono text-xs uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Stacja kosmiczna</span>}
+                            {it._type === "event" && it.visibility === "admin" && <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Tylko admin</span>}
+                            {it._type === "event" && it.guestListEnabled && <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Zapisy</span>}
+                            {it._type === "event" && it.kosmobusEnabled && <span className="font-mono text-xs uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Kosmobus</span>}
+                            {it.time && <span className="font-mono text-sm uppercase tracking-widest opacity-70">{it.time.slice(0, 5)}</span>}
                           </div>
                           <div className="flex items-start justify-between gap-3 flex-1">
                             <div className="flex-1 min-w-0">
@@ -2874,8 +2882,8 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
                         <div className="p-4 sm:p-5 flex-1 min-w-0 flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-2">
-                              {it.guestListEnabled && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Zapisy</span>}
-                              {it.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Kosmobus</span>}
+                              {it.guestListEnabled && <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Zapisy</span>}
+                              {it.kosmobusEnabled && <span className="font-mono text-xs uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">Kosmobus</span>}
                             </div>
                             <h3 className="font-display text-lg sm:text-xl mb-1 leading-tight">
                               {it.image && it.icon && <span className="mr-2 emoji-mono">{it.icon}</span>}{it.title}
@@ -2974,7 +2982,7 @@ const WydarzenieFormModal = ({ open, onClose, editing, onSave }) => {
                 <button key={opt.value} type="button" onClick={() => update("visibility", opt.value)}
                   className={`w-full text-left border px-4 py-3 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                   <div className="font-display text-sm">{opt.title}</div>
-                  <div className={`font-mono text-[11px] uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
+                  <div className={`font-mono text-xs uppercase tracking-widest mt-1 ${selected ? "opacity-80" : "opacity-60"}`}>{opt.desc}</div>
                 </button>
               );
             })}
@@ -3200,32 +3208,32 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
       <div className="px-5 pt-5">
         <Button variant="outline" size="sm" onClick={onBack}>← Wróć</Button>
       </div>
-      {item.image ? (
-        <div className="mt-5 mx-5 border border-black">
-          <img src={item.image} alt="" className="w-full h-64 sm:h-80 object-cover block" />
-        </div>
-      ) : item.icon ? (
-        <div className="mt-5 mx-5 border border-black h-64 sm:h-80 flex items-center justify-center bg-black/5">
-          <span className="text-8xl sm:text-9xl emoji-mono">{item.icon}</span>
-        </div>
-      ) : null}
       <div className="px-5 pt-5">
         <div className="flex flex-wrap gap-2 mb-3">
-          {item.date && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{formatDate(item.date, item.time)}</span>}
-          {item.visibility === "admin" && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Tylko admin</span>}
-          {item.guestListEnabled && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">✍️</span> Zapisy</span>}
-          {item.transportNeeded && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚗</span> Transport</span>}
-          {item.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚌</span> Kosmobus</span>}
+          {item.date && <span className="font-mono text-sm uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{formatDate(item.date, item.time)}</span>}
+          {item.visibility === "admin" && <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">Tylko admin</span>}
+          {item.guestListEnabled && <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">✍️</span> Zapisy</span>}
+          {item.transportNeeded && <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚗</span> Transport</span>}
+          {item.kosmobusEnabled && <span className="font-mono text-xs uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-6">
+        <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold uppercase leading-[0.95] mb-6">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
-        {/* Two-column grid on lg+: main column has the description and admin
-            actions; aside has the interactive widgets (Zapisy, Kosmobus,
-            custom transports). Mobile stacks: description first, then
-            sections, then admin buttons last. */}
+        {/* Two-column grid on lg+: main column has image, description and
+            admin actions; aside has the interactive widgets (Zapisy,
+            Kosmobus, custom transports). Mobile stacks: image, description,
+            then sections, then admin buttons. */}
         <div className="lg:grid lg:grid-cols-3 lg:gap-8">
           <div className="lg:col-span-2 lg:order-1">
+            {item.image ? (
+              <div className="border border-black mb-6">
+                <img src={item.image} alt="" className="w-full h-64 sm:h-80 lg:h-96 object-cover block" />
+              </div>
+            ) : item.icon ? (
+              <div className="border border-black h-64 sm:h-80 lg:h-96 flex items-center justify-center bg-black/5 mb-6">
+                <span className="text-8xl sm:text-9xl emoji-mono">{item.icon}</span>
+              </div>
+            ) : null}
             {item.description && <div className="prose-simple mb-10">{renderRichText(item.description)}</div>}
             {isAdmin && (
               <div className="flex gap-3 mt-4">
@@ -3244,7 +3252,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                       <span className="text-2xl emoji-mono">✍️</span>
                       <h2 className="font-display text-xl">Zapisy</h2>
                     </div>
-                    <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                    <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-1">
                       {guestUsers.length} {guestUsers.length === 1 ? "osoba" : "osób"}
                     </p>
                   </div>
@@ -3272,7 +3280,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                     ))}
                   </div>
                 ) : (
-                  <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
+                  <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
                     Nikt jeszcze się nie zapisał
                   </div>
                 )}
@@ -3296,7 +3304,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                           <span className="text-2xl emoji-mono">🚌</span>
                           <h3 className="font-display text-lg">Kosmobus</h3>
                         </div>
-                        <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                        <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-1">
                           Transport organizowany
                         </p>
                       </div>
@@ -3304,7 +3312,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                         <div className="font-display text-2xl leading-none">
                           {kosmoEnrolled.length} / {KOSMOBUS_SEATS}
                         </div>
-                        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                        <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-1">
                           {kosmoLeft > 0 ? `${kosmoLeft} ${seatsLabel(kosmoLeft)} wolne` : "Brak miejsc"}
                         </div>
                       </div>
@@ -3353,7 +3361,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                             {t.emoji && <span className="text-2xl emoji-mono">{t.emoji}</span>}
                             <h3 className="font-display text-lg break-words">{t.name}</h3>
                           </div>
-                          <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                          <p className="font-mono text-xs uppercase tracking-widest opacity-70 mt-1">
                             Organizator: {(() => {
                               const o = users.find(u => u.id === t.ownerId);
                               return o ? displayNameOf(o) : "—";
@@ -3364,7 +3372,7 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
                           <div className="font-display text-2xl leading-none">
                             {t.enrolled.length} / {t.totalSeats}
                           </div>
-                          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                          <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-1">
                             {seatsLeft > 0 ? `${seatsLeft} ${seatsLabel(seatsLeft)} wolne` : "Brak miejsc"}
                           </div>
                         </div>
@@ -3453,10 +3461,10 @@ const UserRow = ({ u, badge, showRemove, onRemove }) => (
         {displayNameOf(u)}
         {badge && <span className="ml-2 font-mono text-[9px] uppercase tracking-widest opacity-60">· {badge}</span>}
       </div>
-      <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}</div>
+      <div className="font-mono text-xs uppercase opacity-60">@{u.username}</div>
     </div>
     {showRemove && (
-      <button onClick={onRemove} className="font-mono text-[11px] uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
+      <button onClick={onRemove} className="font-mono text-xs uppercase border border-black px-2 py-1 hover:bg-black hover:text-white">Usuń</button>
     )}
   </div>
 );
@@ -3491,7 +3499,7 @@ const UserPickerModal = ({ open, onClose, users, onPick }) => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display text-sm truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}</div>
+                  <div className="font-mono text-xs uppercase opacity-60">@{u.username}</div>
                 </div>
               </button>
             ))}
@@ -3529,7 +3537,7 @@ const TransportFormModal = ({ open, onClose, onSave }) => {
           placeholder="np. Auto Kasi z Warszawy" required />
         <Input label="Łączna liczba miejsc (z Tobą)" type="number" min="1" max="20"
           value={form.totalSeats} onChange={e => update("totalSeats", parseInt(e.target.value, 10) || 1)} required />
-        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">
           Po zapisaniu zostaniesz automatycznie dodany jako organizator.
         </p>
         <div className="flex gap-3 pt-2">
@@ -3741,7 +3749,7 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
           onChange={e => update("icon", truncateGraphemes(e.target.value, 1))} maxLength={8} />
         <Input label="Tytuł" value={form.title} onChange={e => update("title", e.target.value)} required />
         <Textarea label="Treść (rich text)" value={form.content} onChange={e => update("content", e.target.value)} rows={7} />
-        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
         <ImageUpload label="Zdjęcie" value={form.photo} onChange={v => update("photo", v)} />
         {form.photo && (
           <div>
@@ -3831,7 +3839,7 @@ const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
     <Card className="p-5">
       <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
         <div className="font-mono text-xs uppercase tracking-widest opacity-70">Twoja obecność</div>
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60">Stuknij dzień, aby zaznaczyć</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-60">Stuknij dzień, aby zaznaczyć</div>
       </div>
       <div className="overflow-x-auto no-scrollbar -mx-5 px-5"
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
@@ -3861,7 +3869,7 @@ const AttendanceCalendar = ({ user, startDate, endDate, onUpdate }) => {
                       return (
                         <button key={opt.value}
                           onClick={() => setAttendance(day, opt.value)}
-                          className={`font-display text-[11px] py-1.5 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
+                          className={`font-display text-xs py-1.5 border transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
                           {opt.label}
                         </button>
                       );
@@ -4091,7 +4099,7 @@ const MiejsceEditModal = ({ open, onClose, data, onSave }) => {
             value={form.lng ?? ""} onChange={e => update("lng", parseCoord(e.target.value))}
             placeholder="20.8667" />
         </div>
-        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">Współrzędne są używane do widgetu zachodu słońca</p>
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">Współrzędne są używane do widgetu zachodu słońca</p>
         <Textarea label="Kontakt" value={form.contact} onChange={e => update("contact", e.target.value)} rows={4}
           placeholder="Telefon, email, itp." />
         <div className="flex gap-3 pt-2">
@@ -4247,7 +4255,7 @@ const ChangePasswordModal = ({ open, onClose, user, onUpdate }) => {
         <Input label="Obecne hasło" type="password" value={current} onChange={e => setCurrent(e.target.value)} autoComplete="current-password" />
         <Input label="Nowe hasło" type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" />
         <Input label="Powtórz nowe hasło" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" />
-        <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">
           Hasła nie da się zresetować. Zapamiętaj nowe.
         </p>
         {error && (
@@ -4325,7 +4333,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
         <div className="border border-black">
           <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-black/20">
             <div className="min-w-0 flex-1">
-              <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 mb-1">
+              <div className="font-mono text-xs uppercase tracking-widest opacity-60 mb-1">
                 {showsPseudonym ? "Pseudonim" : "Imię i nazwisko"}
               </div>
               <div className="text-base truncate">{displayName}</div>
@@ -4336,7 +4344,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
             </button>
           </div>
           <div className="px-4 py-3">
-            <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 mb-1">Nazwa użytkownika</div>
+            <div className="font-mono text-xs uppercase tracking-widest opacity-60 mb-1">Nazwa użytkownika</div>
             <div className="text-base truncate">@{user.username}</div>
           </div>
         </div>
@@ -4355,7 +4363,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated }) => {
           <ToggleTile checked={animated} onChange={onToggleAnimated}
             title="Animowane tło"
             subtitle={animated ? "Włączone" : "Wyłączone"} />
-          <p className="font-mono text-[11px] uppercase tracking-widest opacity-60">
+          <p className="font-mono text-xs uppercase tracking-widest opacity-60">
             Ustawienie zapisywane na tym urządzeniu.
           </p>
         </div>
@@ -4416,7 +4424,7 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
   // unmarked. Same visual language as AttendanceCalendar so the meaning
   // transfers across the app.
   const AttendanceCell = ({ status }) => {
-    const base = "w-7 h-7 border flex items-center justify-center font-display text-[11px] shrink-0";
+    const base = "w-7 h-7 border flex items-center justify-center font-display text-xs shrink-0";
     if (status === "yes")   return <div className={`${base} border-black bg-black text-white`}>✓</div>;
     if (status === "maybe") return <div className={`${base} border-black border-dashed`}>?</div>;
     if (status === "no")    return <div className={`${base} border-black opacity-40`}>✕</div>;
@@ -4455,7 +4463,7 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
+                  <div className="font-mono text-xs uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
                 </div>
                 {/* Inline summary tags — only when we have attendance data and
                     are allowed to show it. Compact at-a-glance read of "how
@@ -4463,17 +4471,17 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
                 {canSeeAttendance && days.length > 0 && (counts.yes + counts.maybe + counts.no > 0) && (
                   <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                     {counts.yes > 0 && (
-                      <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">
+                      <span className="font-mono text-xs uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none">
                         {counts.yes} ✓
                       </span>
                     )}
                     {counts.maybe > 0 && (
-                      <span className="font-mono text-[11px] uppercase tracking-widest border border-black border-dashed inline-flex items-center px-2 py-1 leading-none">
+                      <span className="font-mono text-xs uppercase tracking-widest border border-black border-dashed inline-flex items-center px-2 py-1 leading-none">
                         {counts.maybe} ?
                       </span>
                     )}
                     {counts.no > 0 && (
-                      <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none opacity-60">
+                      <span className="font-mono text-xs uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none opacity-60">
                         {counts.no} ✕
                       </span>
                     )}
@@ -4516,9 +4524,10 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
 // edit; description is a single rich-text textarea. Each save triggers an
 // optimistic update at the App level via onSave, so changes show up on the
 // home page immediately even before the network round-trip resolves.
-const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }) => {
+const HomeContentEditor = ({ content = { mottos: [], description: "", noStacjePlaceholder: "" }, onSave }) => {
   const [mottos, setMottos] = useState(content.mottos || []);
   const [description, setDescription] = useState(content.description || "");
+  const [noStacjePlaceholder, setNoStacjePlaceholder] = useState(content.noStacjePlaceholder || "");
   const [draftMotto, setDraftMotto] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
@@ -4528,6 +4537,7 @@ const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }
   useEffect(() => {
     setMottos(content.mottos || []);
     setDescription(content.description || "");
+    setNoStacjePlaceholder(content.noStacjePlaceholder || "");
   }, [content]);
 
   const persist = async (next) => {
@@ -4548,12 +4558,12 @@ const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }
     if (!v) return;
     const next = [...mottos, v];
     setMottos(next); setDraftMotto("");
-    await persist({ mottos: next, description });
+    await persist({ mottos: next, description, noStacjePlaceholder });
   };
   const removeMotto = async (i) => {
     const next = mottos.filter((_, idx) => idx !== i);
     setMottos(next);
-    await persist({ mottos: next, description });
+    await persist({ mottos: next, description, noStacjePlaceholder });
   };
   const editMotto = async (i, value) => {
     const next = mottos.map((m, idx) => idx === i ? value : m);
@@ -4562,10 +4572,13 @@ const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }
     // we're not flooding the storage layer per-keystroke.
   };
   const persistMottoEdit = async () => {
-    await persist({ mottos: mottos.map(m => (m || "").trim()).filter(Boolean), description });
+    await persist({ mottos: mottos.map(m => (m || "").trim()).filter(Boolean), description, noStacjePlaceholder });
   };
   const saveDescription = async () => {
-    await persist({ mottos, description });
+    await persist({ mottos, description, noStacjePlaceholder });
+  };
+  const savePlaceholder = async () => {
+    await persist({ mottos, description, noStacjePlaceholder });
   };
 
   return (
@@ -4573,7 +4586,7 @@ const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }
       <div>
         <div className="font-display font-bold uppercase mb-1">Motta na stronie głównej</div>
         <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
-          Wyświetlają się losowo i zmieniają co 10 sekund. Dodaj kilka — animacja działa najlepiej, gdy jest z czego wybierać.
+          Wyświetlają się losowo na każdym wejściu na stronę. Dodaj kilka — różnorodność lepiej wygląda.
         </div>
         {mottos.length > 0 && (
           <div className="space-y-2 mb-3">
@@ -4615,13 +4628,26 @@ const HomeContentEditor = ({ content = { mottos: [], description: "" }, onSave }
           className="w-full border border-black px-3 py-2 bg-white resize-y" />
       </div>
 
+      <div className="border-t border-black pt-5">
+        <div className="font-display font-bold uppercase mb-1">Tekst zachęty do dodania stacji</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
+          Pokazuje się na stronie głównej osobom, które jeszcze nie prowadzą żadnej stacji kosmicznej. Zostaw puste, żeby użyć domyślnego tekstu.
+        </div>
+        <textarea value={noStacjePlaceholder}
+          onChange={e => setNoStacjePlaceholder(e.target.value)}
+          onBlur={savePlaceholder}
+          rows={3}
+          placeholder="np. Stacja kosmiczna to coś, co chcesz zrobić w czasie festiwalu..."
+          className="w-full border border-black px-3 py-2 bg-white resize-y" />
+      </div>
+
       {savedAt && !saving && (
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60">
+        <div className="font-mono text-xs uppercase tracking-widest opacity-60">
           Zapisano
         </div>
       )}
       {saving && (
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-60">
+        <div className="font-mono text-xs uppercase tracking-widest opacity-60">
           Zapisywanie…
         </div>
       )}
@@ -4659,7 +4685,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-display text-sm leading-tight">{t.title}</div>
-                <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 truncate">
+                <div className="font-mono text-xs uppercase tracking-widest opacity-60 truncate">
                   Domyślnie: {t.icon}
                 </div>
               </div>
@@ -4684,7 +4710,7 @@ const HomeTilesEditor = ({ overrides = {}, onSave }) => {
   );
 };
 
-const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon, homeContent = { mottos: [], description: "" }, onSaveHomeContent }) => {
+const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuestList, stacjeListVisible, onToggleStacjeList, attendanceVisible, onToggleAttendance, attendanceDeadline = "", onSaveAttendanceDeadline, homeTilesOverrides = {}, onSaveHomeTileIcon, homeContent = { mottos: [], description: "", noStacjePlaceholder: "" }, onSaveHomeContent }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -4777,7 +4803,7 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold truncate">{displayNameOf(u)}</div>
-                  <div className="font-mono text-[11px] uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
+                  <div className="font-mono text-xs uppercase opacity-60">@{u.username}{u.role === "admin" && " · admin"}</div>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => { setEditing(u); setModalOpen(true); }}>Edytuj</Button>
                 {u.username !== user.username && (
@@ -4856,10 +4882,11 @@ export default function App() {
   // "wydarzenia"), value is the emoji string. Missing keys fall back to the
   // default in HOME_TILES. Persisted at storage key `home_tiles`.
   const [homeTilesOverrides, setHomeTilesOverrides] = useState({});
-  // Editorial content for the home page sidebar — rotating mottos and a
-  // rich-text "about the festival" blurb. Both managed by admin via the
+  // Editorial content for the home page sidebar — rotating mottos, a
+  // rich-text "about the festival" blurb, and the placeholder copy shown
+  // when a user has no stacje kosmiczne yet. All managed by admin via the
   // admin page; persisted at storage key `home_content`.
-  const [homeContent, setHomeContent] = useState({ mottos: [], description: "" });
+  const [homeContent, setHomeContent] = useState({ mottos: [], description: "", noStacjePlaceholder: "" });
   const [stacjeRefreshKey, setStacjeRefreshKey] = useState(0);
 
   // Router integration
@@ -4948,6 +4975,7 @@ export default function App() {
           setHomeContent({
             mottos: Array.isArray(homeC?.mottos) ? homeC.mottos : [],
             description: homeC?.description || "",
+            noStacjePlaceholder: homeC?.noStacjePlaceholder || "",
           });
           setInitialized(true);
           return;
@@ -5054,6 +5082,7 @@ export default function App() {
         const next = {
           mottos: Array.isArray(c?.mottos) ? c.mottos : [],
           description: c?.description || "",
+          noStacjePlaceholder: c?.noStacjePlaceholder || "",
         };
         setHomeContent(prev => sameJSON(prev, next) ? prev : next);
       }).catch(() => {});
@@ -5145,6 +5174,7 @@ export default function App() {
               setHomeContent({
                 mottos: Array.isArray(homeC?.mottos) ? homeC.mottos : [],
                 description: homeC?.description || "",
+                noStacjePlaceholder: homeC?.noStacjePlaceholder || "",
               });
             }
             // Warm the cache for the rest of the app
@@ -5185,6 +5215,7 @@ export default function App() {
     setHomeContent({
       mottos: Array.isArray(homeC?.mottos) ? homeC.mottos : [],
       description: homeC?.description || "",
+      noStacjePlaceholder: homeC?.noStacjePlaceholder || "",
     });
     // Warm the cache so navigation feels instant
     storage.prefetchAll("user:");
@@ -5269,6 +5300,7 @@ export default function App() {
         ? next.mottos.map(s => String(s || "").trim()).filter(Boolean)
         : [],
       description: String(next?.description || ""),
+      noStacjePlaceholder: String(next?.noStacjePlaceholder || ""),
     };
     const prev = homeContent;
     setHomeContent(sanitized);

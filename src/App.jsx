@@ -550,7 +550,17 @@ const useStorageRefresh = (prefixes, load) => {
         ck.startsWith("getAll:" + p) ||
         ck.startsWith("list:" + p)
       );
-      if (matches) load();
+      if (!matches) return;
+      // Don't stomp on active interactions — text selection, focused
+      // inputs, contenteditable. Views will pick up fresh data on next
+      // unmount/remount or next navigation, which is fine.
+      try {
+        const sel = window.getSelection?.();
+        if (sel && !sel.isCollapsed && String(sel).length > 0) return;
+        const a = document.activeElement;
+        if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
+      } catch {}
+      load();
     };
     window.addEventListener("storage:refresh", onRefresh);
     return () => window.removeEventListener("storage:refresh", onRefresh);
@@ -1712,54 +1722,69 @@ const PwaInstallBanner = () => {
 // ============================================================
 // COUNTDOWN WIDGET — counts down to the festival's start date
 // ============================================================
-const CountdownWidget = ({ startDate, endDate }) => {
-  const [now, setNow] = useState(() => new Date());
+// Countdown to the next wydarzenie. Picks the event that's most "current"
+// for the user:
+//
+//   • Future events are always candidates.
+//   • A past event remains a candidate for up to 1 hour after its start
+//     (lets you keep showing "happening now" through an event's typical
+//     duration). After that, it ages out.
+//   • Among candidates, pick the one whose start time is closest in
+//     absolute terms to now. If two are equidistant, prefer the future
+//     one — countdowns toward something feel more useful than "started
+//     X minutes ago".
+//
+// Example: events at 14:00 and 16:00.
+//   - At 14:45 → 14:00 is 45m past (still under the 1h window),
+//     16:00 is 1h15m future. 14:00 is closer → show "started 45 min temu".
+//   - At 14:50 → 14:00 is 50m past, 16:00 is 1h10m future.
+//     14:00 still wins by absolute distance.
+//   - At 15:30 → 14:00 is 1h30m past (aged out), 16:00 is 30m future.
+//     16:00 wins.
+//
+// If there are no candidates, the widget renders nothing.
+const PAST_EVENT_GRACE_MS = 60 * 60 * 1000; // 1 hour
 
+const pickFocusedEvent = (events, now) => {
+  if (!Array.isArray(events) || events.length === 0) return null;
+  const nowMs = now.getTime();
+  const candidates = events
+    .filter(e => e.date)
+    .map(e => {
+      const t = new Date(`${e.date}T${e.time || "00:00"}:00`);
+      if (isNaN(t)) return null;
+      return { e, ms: t.getTime() };
+    })
+    .filter(Boolean)
+    .filter(({ ms }) => ms - nowMs > -PAST_EVENT_GRACE_MS) // past events ≤ 1h ago, plus all future
+    .sort((a, b) => {
+      const da = Math.abs(a.ms - nowMs);
+      const db = Math.abs(b.ms - nowMs);
+      if (da !== db) return da - db;
+      // Tie-break: prefer the future one
+      return (b.ms - nowMs) - (a.ms - nowMs);
+    });
+  return candidates[0] || null;
+};
+
+const NextEventCountdown = ({ events, onOpen }) => {
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60 * 1000); // minute is enough
+    const id = setInterval(() => setNow(new Date()), 30 * 1000);
     return () => clearInterval(id);
   }, []);
 
-  if (!startDate) return null;
-
-  const target = new Date(startDate + "T00:00:00");
-  const end = endDate ? new Date(endDate + "T23:59:59") : target;
-  const diffMs = target.getTime() - now.getTime();
-  const inProgress = now >= target && now <= end;
-  const past = now > end;
-
-  // Format range header
-  const fmtDate = (s) => new Date(s + "T12:00").toLocaleDateString("pl-PL", { day: "numeric", month: "long" });
-  const rangeText = endDate && endDate !== startDate
-    ? `${fmtDate(startDate)} – ${fmtDate(endDate)}`
-    : fmtDate(startDate);
-
-  if (past) {
-    return (
-      <div className="border border-black p-5 mb-6">
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-2">Camp Bau</div>
-        <div className="font-display text-2xl">Do zobaczenia w przyszłym roku!</div>
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-2">{rangeText}</div>
-      </div>
-    );
-  }
-
-  if (inProgress) {
-    return (
-      <div className="border border-black p-5 mb-6 bg-black text-white">
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-80 mb-2">Camp Bau · {rangeText}</div>
-        <div className="font-display text-3xl">Festiwal trwa! 🌌</div>
-      </div>
-    );
-  }
-
-  // Counting down
-  const totalSeconds = Math.floor(diffMs / 1000);
+  const focused = pickFocusedEvent(events, now);
+  if (!focused) return null;
+  const { e, ms } = focused;
+  const diff = ms - now.getTime();
+  const inPast = diff < 0;
+  const absMs = Math.abs(diff);
+  const totalSeconds = Math.floor(absMs / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
 
-  // Polish plurals
   const lbl = (n, one, few, many) => {
     if (n === 1) return one;
     const last = n % 10;
@@ -1768,26 +1793,43 @@ const CountdownWidget = ({ startDate, endDate }) => {
     return many;
   };
 
+  // Header label switches based on whether we're counting down or showing
+  // an event that has just started. The latter case is short-lived (≤1h)
+  // but feels much more "live" — the user can see they should be there now.
+  const headerLabel = inPast ? "Trwa teraz" : "Najbliższe wydarzenie";
+
   return (
-    <div className="border border-black p-5 mb-6">
+    <div className={`border border-black p-5 mb-6 ${inPast ? "bg-black text-white" : ""} ${onOpen ? "cursor-pointer hover:bg-black hover:text-white transition-colors" : ""}`}
+      onClick={onOpen ? () => onOpen(e.id) : undefined}>
       <div className="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">Do festiwalu</div>
-        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">{rangeText}</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">{headerLabel}</div>
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">
+          {formatDate(e.date, e.time)}
+        </div>
+      </div>
+      <div className="font-display text-2xl uppercase leading-tight mb-4 break-words">
+        {e.icon && <span className="mr-2 emoji-mono">{e.icon}</span>}
+        {e.title}
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <div className="text-center border border-black py-3">
+        <div className={`text-center border py-3 ${inPast ? "border-white/40" : "border-black"}`}>
           <div className="font-display text-3xl leading-none">{days}</div>
           <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 mt-1">{lbl(days, "dzień", "dni", "dni")}</div>
         </div>
-        <div className="text-center border border-black py-3">
+        <div className={`text-center border py-3 ${inPast ? "border-white/40" : "border-black"}`}>
           <div className="font-display text-3xl leading-none">{hours}</div>
           <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 mt-1">{lbl(hours, "godz.", "godz.", "godz.")}</div>
         </div>
-        <div className="text-center border border-black py-3">
+        <div className={`text-center border py-3 ${inPast ? "border-white/40" : "border-black"}`}>
           <div className="font-display text-3xl leading-none">{minutes}</div>
           <div className="font-mono text-[9px] uppercase tracking-widest opacity-70 mt-1">{lbl(minutes, "min.", "min.", "min.")}</div>
         </div>
       </div>
+      {inPast && (
+        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-3">
+          Wydarzenie się rozpoczęło
+        </div>
+      )}
     </div>
   );
 };
@@ -1853,7 +1895,7 @@ const isAttendanceComplete = (user, startDate, endDate) => {
   return true;
 };
 
-const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "" } }) => {
+const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpenStacja, onUpdate, homeTilesOverrides = {}, attendanceDeadline = "", homeContent = { mottos: [], description: "" } }) => {
   const tiles = HOME_TILES.filter(t => {
     // Don't link the home page from itself.
     if (t.hideFromHomeRail) return false;
@@ -1876,13 +1918,36 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
 
   const [miejsce, setMiejsce] = useState(null);
   const [miejsceLoaded, setMiejsceLoaded] = useState(false);
+  // Events list — used to drive the next-event countdown widget.
+  const [events, setEvents] = useState([]);
+  // Stacje where the current user is an organizer, surfaced as a "Twoje
+  // stacje kosmiczne" section so they have one tap to jump to anything they
+  // host. If the list is empty we show a CTA instead.
+  const [myStacje, setMyStacje] = useState([]);
 
   useEffect(() => {
     storage.get("miejsce").then(m => {
       setMiejsce(m);
       setMiejsceLoaded(true);
     });
-  }, []);
+    storage.getAll("wydarzenie:").then(list => {
+      // Filter visibility: hide admin-only events from non-admins, same as
+      // the wydarzenia list view does.
+      const isAdmin = user.role === "admin";
+      const visible = list.filter(e => isAdmin || e.visibility !== "admin");
+      setEvents(visible);
+    }).catch(() => {});
+    storage.getAll("stacja:").then(list => {
+      const mine = list.filter(s => Array.isArray(s.owners) && s.owners.includes(user.id));
+      // Sort: dated first (chronological), then dateless
+      mine.sort((a, b) => {
+        const ad = a.date ? new Date(`${a.date}T${a.time || "00:00"}`).getTime() : Infinity;
+        const bd = b.date ? new Date(`${b.date}T${b.time || "00:00"}`).getTime() : Infinity;
+        return ad - bd;
+      });
+      setMyStacje(mine);
+    }).catch(() => {});
+  }, [user.id, user.role]);
 
   const lat = (miejsce && typeof miejsce.lat === "number") ? miejsce.lat : 51.8667;
   const lng = (miejsce && typeof miejsce.lng === "number") ? miejsce.lng : 20.8667;
@@ -1936,9 +2001,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
                 {renderRichText(homeContent.description)}
               </div>
             )}
-            {miejsceLoaded && startDate && (
-              <CountdownWidget startDate={startDate} endDate={endDate} />
-            )}
+            <NextEventCountdown events={events} onOpen={onOpenWydarzenie} />
             {/* The attendance calendar is always shown (when festival dates
                 are configured). When nothing has been marked, a notice sits
                 above it nudging the user to confirm before the deadline.
@@ -1966,6 +2029,39 @@ const HomeView = ({ user, guestListVisible, onNavigate, onUpdate, homeTilesOverr
                 </div>
               </>
             )}
+
+            {/* Twoje stacje kosmiczne — quick-access list of stations the
+                user organizes. If they don't have any, we surface a CTA
+                instead so they can create one in one tap. */}
+            <div className="mb-6">
+              <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mb-3">
+                Twoje stacje kosmiczne
+              </div>
+              {myStacje.length > 0 ? (
+                <div className="space-y-2">
+                  {myStacje.map(s => (
+                    <button key={s.id} onClick={() => onOpenStacja(s.id)}
+                      className="w-full flex items-center gap-3 border border-black p-3 text-left hover:bg-black hover:text-white transition-colors">
+                      <div className="text-3xl leading-none shrink-0 emoji-mono">{s.icon || "🛸"}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-display font-bold truncate">{s.title}</div>
+                        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70">
+                          {s.date ? formatDate(s.date, s.time) : (s.dateSuggestion ? `Sugestia: ${s.dateSuggestion}` : "Data do ustalenia")}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <Card className="p-5">
+                  <p className="text-sm mb-3">
+                    Nie prowadzisz jeszcze żadnej stacji kosmicznej. Stacja to coś, co chcesz zrobić, pokazać albo poprowadzić w czasie festiwalu — warsztat, mała ceremonia, gra, pokaz, cokolwiek.
+                  </p>
+                  <Button size="sm" onClick={() => onNavigate("stacje")}>+ Załóż swoją stację</Button>
+                </Card>
+              )}
+            </div>
+
             {miejsceLoaded && (
               <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
             )}
@@ -2452,43 +2548,51 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
           <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{visibilityLabel(item.visibility)}</span>
           {dateLine && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none">{dateLine}</span>}
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
+        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-6">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
-        {item.description && <div className="prose-simple mb-6">{renderRichText(item.description)}</div>}
-      </div>
-      <div className="mx-5 border-t border-black pt-5 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display font-bold uppercase">Organizatorzy ({owners.length})</h2>
-          {canEdit && (
-            <Button variant="outline" size="sm" onClick={() => setCoOwnerOpen(true)}>+ Dodaj</Button>
-          )}
-        </div>
-        <div className="space-y-2">
-          {owners.map(o => (
-            <div key={o.id} className="flex items-center gap-3 border border-black p-2">
-              <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
-                {o.profilePicture
-                  ? <img src={o.profilePicture} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(o)}</div>}
+        {/* Two-column grid on lg+: main content (description, edit/delete
+            actions) on the left, narrower aside on the right with the
+            organizer roster. Mobile stacks naturally — main column first,
+            then aside, both full-width. */}
+        <div className="lg:grid lg:grid-cols-3 lg:gap-8">
+          <div className="lg:col-span-2">
+            {item.description && <div className="prose-simple mb-6">{renderRichText(item.description)}</div>}
+            {canEdit && (
+              <div className="flex gap-3 mt-6">
+                <Button variant="outline" onClick={() => setEditOpen(true)} className="flex-1">Edytuj</Button>
+                <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-display font-bold truncate">{displayNameOf(o)}</div>
-                <div className="font-mono text-[11px] uppercase opacity-60">@{o.username}</div>
-              </div>
-              {canEdit && owners.length > 1 && (
-                <button onClick={() => removeCoOwner(o.id)} className="font-mono text-xs uppercase border border-black px-2 py-1">Usuń</button>
+            )}
+          </div>
+          <aside className="lg:col-span-1 mt-8 lg:mt-0 border-t border-black pt-5 lg:border-t-0 lg:pt-0">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display font-bold uppercase">Organizatorzy ({owners.length})</h2>
+              {canEdit && (
+                <Button variant="outline" size="sm" onClick={() => setCoOwnerOpen(true)}>+ Dodaj</Button>
               )}
             </div>
-          ))}
+            <div className="space-y-2">
+              {owners.map(o => (
+                <div key={o.id} className="flex items-center gap-3 border border-black p-2">
+                  <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
+                    {o.profilePicture
+                      ? <img src={o.profilePicture} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(o)}</div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-bold truncate">{displayNameOf(o)}</div>
+                    <div className="font-mono text-[11px] uppercase opacity-60">@{o.username}</div>
+                  </div>
+                  {canEdit && owners.length > 1 && (
+                    <button onClick={() => removeCoOwner(o.id)} className="font-mono text-xs uppercase border border-black px-2 py-1">Usuń</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </div>
-      {canEdit && (
-        <div className="px-5 flex gap-3">
-          <Button variant="outline" onClick={() => setEditOpen(true)} className="flex-1">Edytuj</Button>
-          <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
-        </div>
-      )}
       <StacjaFormModal open={editOpen} onClose={() => setEditOpen(false)} onSave={saveEdit} editing={item} isAdmin={isAdmin} />
       <Modal open={coOwnerOpen} onClose={() => setCoOwnerOpen(false)} title="Dodaj organizatora">
         {availableUsers.length === 0
@@ -3082,7 +3186,9 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
   const handlePickerSelect = async (userId) => {
     if (pickerOpen === "guestList") await adminAddGuest(userId);
     else if (pickerOpen === "kosmobus") await adminAddKosmo(userId);
-    else if (typeof pickerOpen === "string") await ownerAddTransportRider(pickerOpen, userId);
+    else if (typeof pickerOpen === "string" && pickerOpen.startsWith("transport:")) {
+      await ownerAddTransportRider(pickerOpen.slice("transport:".length), userId);
+    }
     setPickerOpen(null);
   };
 
@@ -3111,196 +3217,201 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
           {item.transportNeeded && <span className="font-mono text-[11px] uppercase tracking-widest border border-black inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚗</span> Transport</span>}
           {item.kosmobusEnabled && <span className="font-mono text-[11px] uppercase tracking-widest bg-black text-white inline-flex items-center px-2 py-1 leading-none"><span className="emoji-mono">🚌</span> Kosmobus</span>}
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-4">
+        <h1 className="font-display text-3xl sm:text-4xl font-bold uppercase leading-none mb-6">
           {item.image && item.icon && <span className="mr-3 emoji-mono">{item.icon}</span>}<DisplayHeading as="span">{item.title}</DisplayHeading>
         </h1>
-        {item.description && <div className="prose-simple mb-10">{renderRichText(item.description)}</div>}
-      </div>
-
-      {/* Guest list section */}
-      {item.guestListEnabled && (
-        <div className="mx-5 border border-black p-5 mb-10">
-          <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl emoji-mono">✍️</span>
-                <h2 className="font-display text-xl">Zapisy</h2>
+        {/* Two-column grid on lg+: main column has the description and admin
+            actions; aside has the interactive widgets (Zapisy, Kosmobus,
+            custom transports). Mobile stacks: description first, then
+            sections, then admin buttons last. */}
+        <div className="lg:grid lg:grid-cols-3 lg:gap-8">
+          <div className="lg:col-span-2 lg:order-1">
+            {item.description && <div className="prose-simple mb-10">{renderRichText(item.description)}</div>}
+            {isAdmin && (
+              <div className="flex gap-3 mt-4">
+                <Button variant="outline" onClick={() => setEditOpen(true)} className="flex-1">Edytuj</Button>
+                <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
               </div>
-              <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
-                {guestUsers.length} {guestUsers.length === 1 ? "osoba" : "osób"}
-              </p>
-            </div>
-          </div>
-          <div className="mb-4">
-            {isOnGuestList ? (
-              <Button variant="outline" onClick={cancelGuest} disabled={busy} className="w-full">
-                {busy ? "..." : "Wypisz mnie"}
-              </Button>
-            ) : (
-              <Button onClick={enrollGuest} disabled={busy} className="w-full">
-                {busy ? "..." : "Zapisz mnie na listę"}
-              </Button>
             )}
           </div>
-          {isAdmin && availableUsers(guestList).length > 0 && (
-            <Button variant="outline" size="sm" className="w-full mb-3" onClick={() => setPickerOpen("guestList")}>+ Dodaj osobę</Button>
-          )}
-          {guestUsers.length > 0 ? (
-            <div className="space-y-2">
-              {guestUsers.map(u => (
-                <UserRow key={u.id} u={u}
-                  showRemove={isAdmin && u.id !== user.id}
-                  onRemove={() => adminRemoveGuest(u.id)} />
-              ))}
-            </div>
-          ) : (
-            <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
-              Nikt jeszcze się nie zapisał
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Transport section */}
-      {item.transportNeeded && (
-        <div className="mx-5 mb-10 space-y-6">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl emoji-mono">🚗</span>
-            <h2 className="font-display text-xl">Transport</h2>
-          </div>
-
-          {/* Kosmobus widget */}
-          {item.kosmobusEnabled && (
-            <div className="border border-black p-5">
-              <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl emoji-mono">🚌</span>
-                    <h3 className="font-display text-lg">Kosmobus</h3>
-                  </div>
-                  <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
-                    Transport organizowany
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="font-display text-2xl leading-none">
-                    {kosmoEnrolled.length} / {KOSMOBUS_SEATS}
-                  </div>
-                  <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
-                    {kosmoLeft > 0 ? `${kosmoLeft} ${seatsLabel(kosmoLeft)} wolne` : "Brak miejsc"}
-                  </div>
-                </div>
-              </div>
-              <div className="mb-3">
-                {onKosmo ? (
-                  <Button variant="outline" onClick={cancelKosmo} disabled={busy} className="w-full">
-                    {busy ? "..." : "Wypisz mnie"}
-                  </Button>
-                ) : kosmoLeft > 0 ? (
-                  <Button onClick={enrollKosmo} disabled={busy} className="w-full">
-                    {busy ? "..." : "Zapisz mnie"}
-                  </Button>
-                ) : (
-                  <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
-                    Brak wolnych miejsc
-                  </div>
-                )}
-              </div>
-              {isAdmin && kosmoLeft > 0 && availableUsers(kosmoEnrolled).length > 0 && (
-                <Button variant="outline" size="sm" className="w-full mb-3" onClick={() => setPickerOpen("kosmobus")}>+ Dodaj osobę</Button>
-              )}
-              {kosmoUsers.length > 0 && (
-                <div className="space-y-2">
-                  {kosmoUsers.map(u => (
-                    <UserRow key={u.id} u={u}
-                      showRemove={isAdmin && u.id !== user.id}
-                      onRemove={() => adminRemoveKosmo(u.id)} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Custom transports */}
-          {transports.map(t => {
-            const isOwner = t.ownerId === user.id;
-            const onThis = t.enrolled.includes(user.id);
-            const seatsLeft = t.totalSeats - t.enrolled.length;
-            const enrolledU = t.enrolled.map(id => users.find(u => u.id === id)).filter(Boolean);
-            return (
-              <div key={t.id} className="border border-black p-5">
+          <aside className="lg:col-span-1 lg:order-2 mt-2 lg:mt-0 space-y-6">
+            {/* Guest list section */}
+            {item.guestListEnabled && (
+              <div className="border border-black p-5">
                 <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-                  <div className="min-w-0">
+                  <div>
                     <div className="flex items-center gap-2">
-                      {t.emoji && <span className="text-2xl emoji-mono">{t.emoji}</span>}
-                      <h3 className="font-display text-lg break-words">{t.name}</h3>
+                      <span className="text-2xl emoji-mono">✍️</span>
+                      <h2 className="font-display text-xl">Zapisy</h2>
                     </div>
                     <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
-                      Organizator: {(() => {
-                        const o = users.find(u => u.id === t.ownerId);
-                        return o ? displayNameOf(o) : "—";
-                      })()}
+                      {guestUsers.length} {guestUsers.length === 1 ? "osoba" : "osób"}
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="font-display text-2xl leading-none">
-                      {t.enrolled.length} / {t.totalSeats}
-                    </div>
-                    <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
-                      {seatsLeft > 0 ? `${seatsLeft} ${seatsLabel(seatsLeft)} wolne` : "Brak miejsc"}
-                    </div>
-                  </div>
                 </div>
-                <div className="mb-3">
-                  {onThis ? (
-                    <Button variant="outline" onClick={() => cancelTransport(t.id)} disabled={busy || isOwner} className="w-full">
-                      {isOwner ? "Jesteś organizatorem" : busy ? "..." : "Wypisz mnie"}
-                    </Button>
-                  ) : seatsLeft > 0 ? (
-                    <Button onClick={() => enrollTransport(t.id)} disabled={busy} className="w-full">
-                      {busy ? "..." : "Zapisz mnie"}
+                <div className="mb-4">
+                  {isOnGuestList ? (
+                    <Button variant="outline" onClick={cancelGuest} disabled={busy} className="w-full">
+                      {busy ? "..." : "Wypisz mnie"}
                     </Button>
                   ) : (
-                    <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
-                      Brak wolnych miejsc
-                    </div>
+                    <Button onClick={enrollGuest} disabled={busy} className="w-full">
+                      {busy ? "..." : "Zapisz mnie na listę"}
+                    </Button>
                   )}
                 </div>
-                {(isOwner || isAdmin) && (
-                  <div className="flex gap-2 mb-3">
-                    {seatsLeft > 0 && availableUsers(t.enrolled).length > 0 && (
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => setPickerOpen(t.id)}>+ Dodaj osobę</Button>
-                    )}
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => ownerDeleteTransport(t.id)}>Usuń podwózkę</Button>
-                  </div>
+                {isAdmin && availableUsers(guestList).length > 0 && (
+                  <Button variant="outline" size="sm" className="w-full mb-3" onClick={() => setPickerOpen("guestList")}>+ Dodaj osobę</Button>
                 )}
-                {enrolledU.length > 0 && (
+                {guestUsers.length > 0 ? (
                   <div className="space-y-2">
-                    {enrolledU.map(u => (
+                    {guestUsers.map(u => (
                       <UserRow key={u.id} u={u}
-                        badge={u.id === t.ownerId ? "organizator" : null}
-                        showRemove={(isOwner || isAdmin) && u.id !== t.ownerId}
-                        onRemove={() => ownerRemoveTransportRider(t.id, u.id)} />
+                        showRemove={isAdmin && u.id !== user.id}
+                        onRemove={() => adminRemoveGuest(u.id)} />
                     ))}
+                  </div>
+                ) : (
+                  <div className="font-mono text-[11px] uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
+                    Nikt jeszcze się nie zapisał
                   </div>
                 )}
               </div>
-            );
-          })}
+            )}
 
-          {/* Add transport CTA (anyone can create) */}
-          <Button variant="outline" className="w-full" onClick={() => setTransportFormOpen(true)}>
-            + Dodaj swoją podwózkę
-          </Button>
-        </div>
-      )}
+            {/* Transport section */}
+            {item.transportNeeded && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl emoji-mono">🚗</span>
+                  <h2 className="font-display text-xl">Transport</h2>
+                </div>
 
-      {isAdmin && (
-        <div className="px-5 flex gap-3">
-          <Button variant="outline" onClick={() => setEditOpen(true)} className="flex-1">Edytuj</Button>
-          <Button variant="outline" onClick={remove} className="flex-1">Usuń</Button>
+                {/* Kosmobus widget */}
+                {item.kosmobusEnabled && (
+                  <div className="border border-black p-5">
+                    <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl emoji-mono">🚌</span>
+                          <h3 className="font-display text-lg">Kosmobus</h3>
+                        </div>
+                        <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                          Transport organizowany
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-display text-2xl leading-none">
+                          {kosmoEnrolled.length} / {KOSMOBUS_SEATS}
+                        </div>
+                        <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                          {kosmoLeft > 0 ? `${kosmoLeft} ${seatsLabel(kosmoLeft)} wolne` : "Brak miejsc"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      {onKosmo ? (
+                        <Button variant="outline" onClick={cancelKosmo} disabled={busy} className="w-full">
+                          {busy ? "..." : "Wypisz mnie"}
+                        </Button>
+                      ) : kosmoLeft > 0 ? (
+                        <Button onClick={enrollKosmo} disabled={busy} className="w-full">
+                          {busy ? "..." : "Zapisz mnie"}
+                        </Button>
+                      ) : (
+                        <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
+                          Brak wolnych miejsc
+                        </div>
+                      )}
+                    </div>
+                    {isAdmin && kosmoLeft > 0 && availableUsers(kosmoEnrolled).length > 0 && (
+                      <Button variant="outline" size="sm" className="w-full mb-3" onClick={() => setPickerOpen("kosmobus")}>+ Dodaj osobę</Button>
+                    )}
+                    {kosmoUsers.length > 0 && (
+                      <div className="space-y-2">
+                        {kosmoUsers.map(u => (
+                          <UserRow key={u.id} u={u}
+                            showRemove={isAdmin && u.id !== user.id}
+                            onRemove={() => adminRemoveKosmo(u.id)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Custom transports */}
+                {transports.map(t => {
+                  const isOwner = t.ownerId === user.id;
+                  const onThis = t.enrolled.includes(user.id);
+                  const seatsLeft = t.totalSeats - t.enrolled.length;
+                  const enrolledU = t.enrolled.map(id => users.find(u => u.id === id)).filter(Boolean);
+                  return (
+                    <div key={t.id} className="border border-black p-5">
+                      <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            {t.emoji && <span className="text-2xl emoji-mono">{t.emoji}</span>}
+                            <h3 className="font-display text-lg break-words">{t.name}</h3>
+                          </div>
+                          <p className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                            Organizator: {(() => {
+                              const o = users.find(u => u.id === t.ownerId);
+                              return o ? displayNameOf(o) : "—";
+                            })()}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-display text-2xl leading-none">
+                            {t.enrolled.length} / {t.totalSeats}
+                          </div>
+                          <div className="font-mono text-[11px] uppercase tracking-widest opacity-70 mt-1">
+                            {seatsLeft > 0 ? `${seatsLeft} ${seatsLabel(seatsLeft)} wolne` : "Brak miejsc"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        {onThis && !isOwner ? (
+                          <Button variant="outline" onClick={() => cancelTransport(t.id)} className="w-full">Wypisz mnie</Button>
+                        ) : !onThis && seatsLeft > 0 ? (
+                          <Button onClick={() => enrollTransport(t.id)} className="w-full">Zapisz mnie</Button>
+                        ) : !onThis ? (
+                          <div className="font-mono text-xs uppercase tracking-widest text-center opacity-60 py-3 border border-dashed border-black">
+                            Brak wolnych miejsc
+                          </div>
+                        ) : null}
+                      </div>
+                      {(isOwner || isAdmin) && (
+                        <div className="flex gap-2 mb-3">
+                          {availableUsers(t.enrolled).length > 0 && t.enrolled.length < t.totalSeats && (
+                            <Button variant="outline" size="sm" className="flex-1"
+                              onClick={() => setPickerOpen("transport:" + t.id)}>+ Dodaj osobę</Button>
+                          )}
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => ownerDeleteTransport(t.id)}>Usuń podwózkę</Button>
+                        </div>
+                      )}
+                      {enrolledU.length > 0 && (
+                        <div className="space-y-2">
+                          {enrolledU.map(u => (
+                            <UserRow key={u.id} u={u}
+                              badge={u.id === t.ownerId ? "organizator" : null}
+                              showRemove={(isOwner || isAdmin) && u.id !== t.ownerId}
+                              onRemove={() => ownerRemoveTransportRider(t.id, u.id)} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Add transport CTA (anyone can create) */}
+                <Button variant="outline" className="w-full" onClick={() => setTransportFormOpen(true)}>
+                  + Dodaj swoją podwózkę
+                </Button>
+              </div>
+            )}
+          </aside>
         </div>
-      )}
+      </div>
 
       <WydarzenieFormModal open={editOpen} onClose={() => setEditOpen(false)} editing={item} onSave={saveEdit} />
 
@@ -3311,8 +3422,9 @@ const WydarzenieDetailView = ({ wydarzenieId, user, users, onBack, onRefresh }) 
         users={(() => {
           if (pickerOpen === "guestList") return availableUsers(guestList);
           if (pickerOpen === "kosmobus") return availableUsers(kosmoEnrolled);
-          if (typeof pickerOpen === "string") {
-            const t = transports.find(t => t.id === pickerOpen);
+          if (typeof pickerOpen === "string" && pickerOpen.startsWith("transport:")) {
+            const id = pickerOpen.slice("transport:".length);
+            const t = transports.find(t => t.id === id);
             return t ? availableUsers(t.enrolled) : [];
           }
           return [];
@@ -4902,67 +5014,95 @@ export default function App() {
     // The set of prefixes the rest of the app reads via getAll/get. When we
     // revalidate one, any open view watching for storage:refresh re-renders.
     const prefixes = ["user:", "wydarzenie:", "stacja:", "fsection:"];
+    // Detect whether the user is actively interacting. If so, we postpone
+    // any non-essential refresh — text selection, focused inputs, and the
+    // file-upload-in-flight all break when the parent re-renders mid-action.
+    const isUserBusy = () => {
+      try {
+        const sel = window.getSelection?.();
+        if (sel && !sel.isCollapsed && String(sel).length > 0) return true;
+        const a = document.activeElement;
+        if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return true;
+      } catch {}
+      return false;
+    };
+
+    // Cheap deep-equal for the small singleton records we re-fetch. Avoids
+    // calling setState with a new-but-equivalent object reference, which
+    // would otherwise trigger a tree-wide re-render and break in-progress
+    // user interactions.
+    const sameJSON = (a, b) => {
+      try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+    };
+
     const refreshAll = () => {
+      if (isUserBusy()) return;
       prefixes.forEach(p => {
         storage.revalidatePrefix(p);
-        // Kick off a refetch — this fires storage:refresh on completion.
         storage.prefetchAll(p);
       });
-      // Also refresh the singleton records the app reads via storage.get.
-      // Drop the cache, then re-fetch and propagate to the App-level state
-      // that other views read from (e.g. homeContent → HomeView mottos).
       storage.revalidatePrefix("settings");
       storage.revalidatePrefix("miejsce");
       storage.revalidatePrefix("home_tiles");
       storage.revalidatePrefix("home_content");
       storage.revalidatePrefix("stacje_intro");
 
-      // Re-fetch and update local state so the App's own consumers
-      // (HomeView etc.) see fresh data without waiting for a render cycle
-      // triggered by something else.
+      // Push fresh values into App-level state, but only when they actually
+      // changed. setState with an equivalent-but-different-reference value
+      // still re-renders the whole tree.
       storage.get("home_content").then(c => {
-        setHomeContent({
+        const next = {
           mottos: Array.isArray(c?.mottos) ? c.mottos : [],
           description: c?.description || "",
-        });
+        };
+        setHomeContent(prev => sameJSON(prev, next) ? prev : next);
       }).catch(() => {});
       storage.get("home_tiles").then(t => {
-        setHomeTilesOverrides(t || {});
+        const next = t || {};
+        setHomeTilesOverrides(prev => sameJSON(prev, next) ? prev : next);
       }).catch(() => {});
       storage.get("settings").then(s => {
         if (!s) return;
-        setGuestListVisible(!!s.guestListVisible);
-        setStacjeListVisible(s.stacjeListVisible !== false);
-        setAttendanceVisible(!!s.attendanceVisible);
-        setAttendanceDeadline(s.attendanceDeadline || "");
+        // Only call set if the relevant value actually changed.
+        setGuestListVisible(prev => prev === !!s.guestListVisible ? prev : !!s.guestListVisible);
+        setStacjeListVisible(prev => {
+          const next = s.stacjeListVisible !== false;
+          return prev === next ? prev : next;
+        });
+        setAttendanceVisible(prev => prev === !!s.attendanceVisible ? prev : !!s.attendanceVisible);
+        setAttendanceDeadline(prev => prev === (s.attendanceDeadline || "") ? prev : (s.attendanceDeadline || ""));
       }).catch(() => {});
     };
 
-    // Reload our local users state when any user record changes upstream.
+    // Storage refresh events fire when a background fetch completes with
+    // fresh data. We only act on them for the users list — the views that
+    // care about other prefixes (stacje, wydarzenia, fsection) opt in via
+    // useStorageRefresh themselves, and they all guard against stomping on
+    // open modals via their own setState comparisons.
     const onStorageRefresh = (e) => {
       const ck = e?.detail?.cacheKey || "";
       if (ck.startsWith("getAll:user:") || ck.startsWith("get:user:")) {
+        if (isUserBusy()) return;
         loadUsers();
       }
     };
     window.addEventListener("storage:refresh", onStorageRefresh);
 
-    // Refresh whenever the tab becomes visible after being backgrounded.
-    // This is the most user-noticeable case (open the app on phone after
-    // someone else made an edit on theirs).
+    // Refresh ONLY when the tab regains visibility — this is the safe time
+    // to refetch (user has just returned to the app, expects fresh data, and
+    // can't have any in-progress interaction since the tab was backgrounded).
+    // We previously also polled every 60s, but that was running while the
+    // user was actively typing/uploading/highlighting and stomping on those
+    // interactions. Visibility-only is the right tradeoff: small staleness
+    // window (max ~5 min based on how long someone keeps a tab in front),
+    // zero interruption.
     const onVisibility = () => {
       if (document.visibilityState === "visible") refreshAll();
     };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", refreshAll);
 
-    // Periodic poll. 60s is a reasonable cadence — longer than the SWR
-    // FRESH_TTL so we're not double-fetching, short enough that two people
-    // editing simultaneously see each other's changes within a minute.
-    const id = setInterval(refreshAll, 60 * 1000);
-
     return () => {
-      clearInterval(id);
       window.removeEventListener("storage:refresh", onStorageRefresh);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", refreshAll);
@@ -5148,6 +5288,9 @@ export default function App() {
   const openStacjaDetail = (id) => {
     routerNavigate("/stacje/" + encodeURIComponent(id));
   };
+  const openWydarzenieDetail = (id) => {
+    routerNavigate("/wydarzenia/" + encodeURIComponent(id));
+  };
 
   if (!initialized || !sessionRestored) {
     return (
@@ -5220,7 +5363,10 @@ export default function App() {
         <main className="fade-in max-w-7xl mx-auto" key={location.pathname}>
           <Routes>
             <Route path="/" element={
-              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate} onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides} attendanceDeadline={attendanceDeadline} homeContent={homeContent} />
+              <HomeView user={user} guestListVisible={guestListVisible} onNavigate={navigate}
+                onOpenWydarzenie={openWydarzenieDetail} onOpenStacja={openStacjaDetail}
+                onUpdate={onUpdateUser} homeTilesOverrides={homeTilesOverrides}
+                attendanceDeadline={attendanceDeadline} homeContent={homeContent} />
             } />
             <Route path="/wydarzenia" element={
               <WydarzeniaView user={user} onOpenStacja={openStacjaDetail} />

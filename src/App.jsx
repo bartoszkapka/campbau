@@ -2012,7 +2012,7 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
               </div>
             )}
             {homeContent.description && (
-              <div className="prose-simple mb-8">
+              <div className="prose-simple mb-8 text-center">
                 {renderRichText(homeContent.description)}
               </div>
             )}
@@ -2053,27 +2053,22 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
               const room = resolveRoom(user, houses);
               if (!room) return null;
               return (
-                <div className="mb-6">
-                  <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
-                    Twoje miejsce
+                <Card className="p-5 mb-6">
+                  <div className="font-display font-bold uppercase mb-2">Twoje kosmiczne leże</div>
+                  <div className="font-display text-2xl uppercase leading-tight">{room.houseName}</div>
+                  <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-2">
+                    Pokój: <span className="opacity-100">{room.roomName}</span>
                   </div>
-                  <Card className="p-5">
-                    <div className="font-display text-2xl uppercase leading-tight">{room.houseName}</div>
-                    <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-2">
-                      Pokój: <span className="opacity-100">{room.roomName}</span>
-                    </div>
-                  </Card>
-                </div>
+                </Card>
               );
             })()}
 
             {/* Twoje stacje kosmiczne — quick-access list of stations the
                 user organizes. If they don't have any, we surface a CTA
-                instead so they can create one in one tap. */}
-            <div className="mb-6">
-              <div className="font-mono text-xs uppercase tracking-widest opacity-70 mb-3">
-                Twoje stacje kosmiczne
-              </div>
+                instead so they can create one in one tap. Title sits
+                inside the card to match the rest of the home sidebar. */}
+            <Card className="p-5 mb-6">
+              <div className="font-display font-bold uppercase mb-3">Twoje stacje kosmiczne</div>
               {myStacje.length > 0 ? (
                 <div className="space-y-2">
                   {myStacje.map(s => (
@@ -2090,16 +2085,16 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
                   ))}
                 </div>
               ) : (
-                <Card className="p-5">
+                <>
                   <p className="text-base mb-3">
                     {homeContent.noStacjePlaceholder
                       ? renderRichText(homeContent.noStacjePlaceholder)
                       : "Nie prowadzisz jeszcze żadnej stacji kosmicznej. Stacja to coś, co chcesz zrobić, pokazać albo poprowadzić w czasie festiwalu — warsztat, mała ceremonia, gra, pokaz, cokolwiek."}
                   </p>
                   <Button size="sm" onClick={() => onNavigate("stacje")}>+ Dodaj Stację Kosmiczną</Button>
-                </Card>
+                </>
               )}
-            </div>
+            </Card>
 
             {miejsceLoaded && (
               <SunsetWidget lat={lat} lng={lng} locationName={locationName} />
@@ -2671,6 +2666,10 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
 const WydarzeniaView = ({ user, onOpenStacja }) => {
   const [events, setEvents] = useState([]);
   const [stacje, setStacje] = useState([]);
+  // Admin-editable description shown above the list. Mirrors the stacje_intro
+  // pattern — same UI, same storage shape, separate key (`wydarzenia_intro`).
+  const [intro, setIntro] = useState("");
+  const [introOpen, setIntroOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -2684,10 +2683,12 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
 
   const load = async () => {
     setLoading(true);
-    const [evs, sts] = await Promise.all([
+    const [evs, sts, introData] = await Promise.all([
       storage.getAll("wydarzenie:"),
-      storage.getAll("stacja:")
+      storage.getAll("stacja:"),
+      storage.get("wydarzenia_intro"),
     ]);
+    setIntro(introData?.text || "");
     const publicStacje = sts.filter(s => s.visibility === "public" && s.date);
     // Hide admin-only events from non-admins. Default visibility is public
     // (so events created before this feature are visible).
@@ -2697,7 +2698,13 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
-  useStorageRefresh(["wydarzenie:", "stacja:"], load);
+  useStorageRefresh(["wydarzenie:", "stacja:", "wydarzenia_intro"], load);
+
+  const saveIntro = async (text) => {
+    await storage.set("wydarzenia_intro", { text });
+    setIntro(text);
+    setIntroOpen(false);
+  };
 
   const combined = [
     ...events.map(e => ({ ...e, _type: "event" })),
@@ -2815,6 +2822,29 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
       <PageHeader title="Wydarzenia"
         subtitle={`${combined.length} ${combined.length === 1 ? "wydarzenie" : "wydarzeń"}`}
         action={isAdmin && <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>+ Dodaj</Button>} />
+
+      {/* Admin-editable intro/description — same UI pattern as Stacje
+          kosmiczne. Visible to all guests when set; admin sees an Edytuj
+          button and a placeholder when empty. */}
+      {(intro || isAdmin) && (
+        <div className="px-5 mb-6">
+          <div className="relative">
+            {isAdmin && (
+              <button onClick={() => setIntroOpen(true)}
+                className="absolute top-0 right-0 font-mono text-xs uppercase tracking-widest border border-black px-2 py-1 hover:bg-black hover:text-white">
+                Edytuj
+              </button>
+            )}
+            {intro ? (
+              <div className="prose-simple pr-20">{renderRichText(intro)}</div>
+            ) : (
+              <div className="font-mono text-xs uppercase tracking-widest opacity-60 pr-20">
+                Brak opisu — kliknij "Edytuj" by dodać.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Day calendar strip — sticky at the top of the viewport, below the main header.
           Reflects which day section is currently in view via scroll-spy. The
@@ -2944,7 +2974,27 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
         )}
       <WydarzenieFormModal open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }}
         editing={editing} onSave={save} />
+      <WydarzeniaIntroModal open={introOpen} onClose={() => setIntroOpen(false)} initial={intro} onSave={saveIntro} />
     </div>
+  );
+};
+
+// Reuses the same shape as StacjeIntroModal — separate component name so we
+// can adjust copy independently if needed, but the implementation is mirror.
+const WydarzeniaIntroModal = ({ open, onClose, initial, onSave }) => {
+  const [text, setText] = useState(initial || "");
+  useEffect(() => { if (open) setText(initial || ""); }, [open, initial]);
+  return (
+    <Modal open={open} onClose={onClose} title="Opis Wydarzeń">
+      <div className="space-y-4">
+        <Textarea label="Treść (rich text)" value={text} onChange={e => setText(e.target.value)} rows={8} />
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <div className="flex gap-3 pt-2">
+          <Button onClick={() => onSave(text)} className="flex-1">Zapisz</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
+        </div>
+      </div>
+    </Modal>
   );
 };
 
@@ -3703,55 +3753,47 @@ const FestiwalView = ({ user }) => {
                 })}
               </div>
             </div>
-            <div className="px-5 space-y-16 pt-6">
-              {sections.map((s, idx) => {
-                const photoLeft = s.photo && s.photoSide === "left";
-                // Renders emoji square + heading + body content as a single
-                // logical column. Reused below for both the no-photo case
-                // (full-width) and the side-by-side case (50% column).
-                const textColumn = (
-                  <div className="min-w-0 flex-1">
+            <div className="px-5 pt-6">
+              {/* Sections grid — 1 col on mobile, 2 cols on lg+. Each card
+                  is a fixed-order block: emoji square → title → photo (if
+                  any) → content. The grid lets two short sections share a
+                  row on wide screens; tall sections still flow naturally
+                  because we don't enforce equal heights. */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16">
+                {sections.map((s, idx) => (
+                  <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
+                    {/* Admin controls live above the section content so
+                        they don't compete with the headline. */}
+                    {isAdmin && (
+                      <div className="flex justify-end gap-1 mb-3">
+                        <button onClick={() => reorder(s.id, -1)} disabled={idx === 0}
+                          className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↑</button>
+                        <button onClick={() => reorder(s.id, 1)} disabled={idx === sections.length - 1}
+                          className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↓</button>
+                        <Button variant="outline" size="sm" onClick={() => { setEditing(s); setModalOpen(true); }}>Edytuj</Button>
+                        <Button variant="outline" size="sm" onClick={() => remove(s.id)}>✕</Button>
+                      </div>
+                    )}
                     {s.icon && (
-                      <div className="w-16 h-16 bg-black text-white flex items-center justify-center mb-3">
+                      // mb-5 gives the title a bit more space below the
+                      // emoji square (was mb-3 — bumped by 2pt as requested).
+                      <div className="w-16 h-16 bg-black text-white flex items-center justify-center mb-5">
                         <span className="text-4xl leading-none emoji-mono">{s.icon}</span>
                       </div>
                     )}
                     <DisplayHeading as="h2" className="font-display text-3xl font-bold uppercase leading-tight mb-4">{s.title}</DisplayHeading>
-                    {s.content && <div className="prose-simple festiwal-prose">{renderRichText(s.content)}</div>}
-                  </div>
-                );
-                return (
-                <section key={s.id} id={"section-" + s.id} className="scroll-mt-32">
-                  {/* Admin controls live in their own row at the top so they
-                      don't mess with the centered photo+text alignment below. */}
-                  {isAdmin && (
-                    <div className="flex justify-end gap-1 mb-3">
-                      <button onClick={() => reorder(s.id, -1)} disabled={idx === 0}
-                        className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↑</button>
-                      <button onClick={() => reorder(s.id, 1)} disabled={idx === sections.length - 1}
-                        className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↓</button>
-                      <Button variant="outline" size="sm" onClick={() => { setEditing(s); setModalOpen(true); }}>Edytuj</Button>
-                      <Button variant="outline" size="sm" onClick={() => remove(s.id)}>✕</Button>
-                    </div>
-                  )}
-                  {/* Body: at lg+, the entire text column (emoji + heading +
-                      content) sits next to the photo, vertically centered
-                      against it via lg:items-center. Below lg, photo stacks
-                      above text. flex-row-reverse handles the "left" image
-                      placement without duplicating markup. */}
-                  {s.photo ? (
-                    <div className={`flex flex-col ${photoLeft ? "lg:flex-row-reverse" : "lg:flex-row"} lg:items-center gap-6`}>
-                      {textColumn}
-                      <div className="lg:w-1/2 lg:shrink-0">
-                        <img src={s.photo} alt="" className="w-full max-h-80 lg:max-h-none object-cover border border-black" />
+                    {/* Photo always sits between the title and the paragraph
+                        when present. No more left/right side option — admin
+                        decision now is just whether to include a photo. */}
+                    {s.photo && (
+                      <div className="mb-4">
+                        <img src={s.photo} alt="" className="w-full max-h-80 object-cover border border-black" />
                       </div>
-                    </div>
-                  ) : (
-                    textColumn
-                  )}
-                </section>
-                );
-              })}
+                    )}
+                    {s.content && <div className="prose-simple festiwal-prose">{renderRichText(s.content)}</div>}
+                  </section>
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -3762,13 +3804,12 @@ const FestiwalView = ({ user }) => {
 };
 
 const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
-  const [form, setForm] = useState({ icon: "✨", title: "", content: "", photo: null, photoSide: "right" });
+  const [form, setForm] = useState({ icon: "✨", title: "", content: "", photo: null });
   useEffect(() => {
     if (open) setForm(editing ? {
       icon: editing.icon || "✧", title: editing.title || "",
       content: editing.content || "", photo: editing.photo || null,
-      photoSide: editing.photoSide === "left" ? "left" : "right",
-    } : { icon: "✨", title: "", content: "", photo: null, photoSide: "right" });
+    } : { icon: "✨", title: "", content: "", photo: null });
   }, [open, editing]);
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const submit = (e) => {
@@ -3776,7 +3817,7 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
     if (!form.title.trim()) return;
     onSave({
       icon: form.icon, title: form.title.trim(), content: form.content,
-      photo: form.photo, photoSide: form.photoSide,
+      photo: form.photo,
     });
   };
   return (
@@ -3788,25 +3829,6 @@ const FestiwalSectionModal = ({ open, onClose, editing, onSave }) => {
         <Textarea label="Treść (rich text)" value={form.content} onChange={e => update("content", e.target.value)} rows={7} />
         <p className="font-mono text-xs uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
         <ImageUpload label="Zdjęcie" value={form.photo} onChange={v => update("photo", v)} />
-        {form.photo && (
-          <div>
-            <span className="block font-mono text-xs uppercase tracking-widest mb-1.5">Strona zdjęcia (na większych ekranach)</span>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: "left", label: "Po lewej" },
-                { value: "right", label: "Po prawej" },
-              ].map(opt => {
-                const selected = form.photoSide === opt.value;
-                return (
-                  <button key={opt.value} type="button" onClick={() => update("photoSide", opt.value)}
-                    className={`border px-3 py-2 transition-colors ${selected ? "bg-black text-white border-black" : "border-black hover:bg-black/5"}`}>
-                    <div className="font-display text-sm">{opt.label}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
         <div className="flex gap-3 pt-2">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -4413,7 +4435,7 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, houses = [] }
           if (!room) return null;
           return (
             <div className="border-t border-black pt-5 space-y-2">
-              <div className="font-mono text-xs uppercase tracking-widest opacity-70">Twoje miejsce</div>
+              <div className="font-mono text-xs uppercase tracking-widest opacity-70">Twoje kosmiczne leże</div>
               <div className="font-display text-xl uppercase leading-tight">{room.houseName}</div>
               <div className="font-mono text-xs uppercase tracking-widest opacity-70">
                 Pokój: <span className="opacity-100">{room.roomName}</span>
@@ -5369,6 +5391,7 @@ export default function App() {
       storage.revalidatePrefix("home_tiles");
       storage.revalidatePrefix("home_content");
       storage.revalidatePrefix("stacje_intro");
+      storage.revalidatePrefix("wydarzenia_intro");
 
       // Push fresh values into App-level state, but only when they actually
       // changed. setState with an equivalent-but-different-reference value

@@ -2130,6 +2130,10 @@ const HomeView = ({ user, guestListVisible, onNavigate, onOpenWydarzenie, onOpen
 const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
   const [items, setItems] = useState([]);
   const [intro, setIntro] = useState("");
+  // Optional long-form description shown in a modal when the user taps
+  // "Dowiedz się więcej". Empty = no button rendered.
+  const [introExtended, setIntroExtended] = useState("");
+  const [introExtendedOpen, setIntroExtendedOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(false);
@@ -2142,6 +2146,7 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
       storage.get("stacje_intro")
     ]);
     setIntro(introData?.text || "");
+    setIntroExtended(introData?.extended || "");
     // Filter by visibility:
     // - public: visible to all (full)
     // - hidden: visible to all (mystery card for non-admin/non-owner; full for admin/owner)
@@ -2170,9 +2175,10 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
     load();
   };
 
-  const saveIntro = async (text) => {
-    await storage.set("stacje_intro", { text });
+  const saveIntro = async ({ text, extended }) => {
+    await storage.set("stacje_intro", { text, extended });
     setIntro(text);
+    setIntroExtended(extended || "");
     setIntroOpen(false);
   };
 
@@ -2190,11 +2196,23 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
                 Edytuj
               </button>
             )}
+            {/* Reserve right padding for the Edytuj button only when it
+                actually renders (admin). For non-admins the intro text
+                gets the full column width. */}
             {intro ? (
-              <div className="prose-simple pr-20">{renderRichText(intro)}</div>
+              <div className={`prose-simple ${isAdmin ? "pr-20" : ""}`}>{renderRichText(intro)}</div>
             ) : (
-              <div className="font-mono text-xs uppercase tracking-widest opacity-60 pr-20">
+              <div className={`font-mono text-xs uppercase tracking-widest opacity-60 ${isAdmin ? "pr-20" : ""}`}>
                 Brak opisu — kliknij "Edytuj" by dodać.
+              </div>
+            )}
+            {/* Learn-more button — visible to everyone when admin has set
+                the longer description. */}
+            {introExtended && (
+              <div className="mt-3">
+                <Button variant="outline" size="sm" onClick={() => setIntroExtendedOpen(true)}>
+                  Dowiedz się więcej
+                </Button>
               </div>
             )}
           </div>
@@ -2244,20 +2262,38 @@ const StacjeView = ({ user, users, onOpenDetail, listVisible = true }) => {
           </>
         )}
       <StacjaFormModal open={formOpen} onClose={() => setFormOpen(false)} onSave={save} isAdmin={isAdmin} />
-      <StacjeIntroModal open={introOpen} onClose={() => setIntroOpen(false)} initial={intro} onSave={saveIntro} />
+      <StacjeIntroModal open={introOpen} onClose={() => setIntroOpen(false)}
+        initial={intro} initialExtended={introExtended} onSave={saveIntro} />
+      {/* Read-only modal showing the long-form description. Title omitted so
+          the modal feels like a continuation of the intro paragraph rather
+          than a new dialog. */}
+      <Modal open={introExtendedOpen} onClose={() => setIntroExtendedOpen(false)} title="Stacje kosmiczne">
+        <div className="prose-simple">{renderRichText(introExtended || "")}</div>
+        <div className="mt-5 flex justify-end">
+          <Button variant="outline" onClick={() => setIntroExtendedOpen(false)}>Zamknij</Button>
+        </div>
+      </Modal>
     </div>
   );
 };
 
-const StacjeIntroModal = ({ open, onClose, initial, onSave }) => {
+const StacjeIntroModal = ({ open, onClose, initial, initialExtended, onSave }) => {
   const [text, setText] = useState("");
-  useEffect(() => { if (open) setText(initial || ""); }, [open, initial]);
-  const submit = (e) => { e.preventDefault(); onSave(text.trim()); };
+  const [extended, setExtended] = useState("");
+  useEffect(() => {
+    if (open) {
+      setText(initial || "");
+      setExtended(initialExtended || "");
+    }
+  }, [open, initial, initialExtended]);
+  const submit = (e) => { e.preventDefault(); onSave({ text: text.trim(), extended: extended.trim() }); };
   return (
     <Modal open={open} onClose={onClose} title="Edytuj wstęp">
       <form onSubmit={submit} className="space-y-4">
-        <Textarea label="Tekst wstępu" value={text} onChange={e => setText(e.target.value)} rows={6} />
-        <p className="font-mono text-xs uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit</p>
+        <Textarea label="Tekst wstępu" value={text} onChange={e => setText(e.target.value)} rows={5} />
+        <Textarea label='Rozszerzony opis (otwiera się po kliknięciu "Dowiedz się więcej")'
+          value={extended} onChange={e => setExtended(e.target.value)} rows={9} />
+        <p className="font-mono text-xs uppercase tracking-widest opacity-60">Obsługa: **pogrubienie**, *kursywa*, pusta linia = nowy akapit. Zostaw rozszerzony opis pusty, żeby nie pokazywać przycisku "Dowiedz się więcej".</p>
         <div className="flex gap-3">
           <Button type="submit" className="flex-1">Zapisz</Button>
           <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
@@ -2836,9 +2872,9 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
               </button>
             )}
             {intro ? (
-              <div className="prose-simple pr-20">{renderRichText(intro)}</div>
+              <div className={`prose-simple ${isAdmin ? "pr-20" : ""}`}>{renderRichText(intro)}</div>
             ) : (
-              <div className="font-mono text-xs uppercase tracking-widest opacity-60 pr-20">
+              <div className={`font-mono text-xs uppercase tracking-widest opacity-60 ${isAdmin ? "pr-20" : ""}`}>
                 Brak opisu — kliknij "Edytuj" by dodać.
               </div>
             )}

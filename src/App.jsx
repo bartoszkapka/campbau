@@ -280,16 +280,28 @@ const GlobalStyles = () => (
        env(safe-area-inset-top) returns 0 on devices without a notch/cutout,
        so this is safe to leave on universally. */
     @media (display-mode: standalone) {
+      /* Top padding = the OS-reported safe-area inset (under the clock /
+         notch) + 8px breathing room. The raw inset alone made content sit
+         flush against the status bar; the small extra makes it feel
+         designed-for rather than fighting-with. Same pattern below for the
+         bottom inset. */
       .header-row {
-        padding-top: env(safe-area-inset-top);
+        padding-top: calc(env(safe-area-inset-top) + 8px);
       }
       /* Sticky bars below the header (date strip on Wydarzenia, section
          nav on O Festiwalu) sit at top:5rem because the header is 5rem
          tall. When the status bar overlays, "5rem" becomes too short
          relative to where the header now actually ends, so they
-         overlap. Add the inset to their offset too. */
+         overlap. Match the bumped header padding so the seam stays clean. */
       .sticky-below-header {
-        top: calc(5rem + env(safe-area-inset-top)) !important;
+        top: calc(5rem + env(safe-area-inset-top) + 8px) !important;
+      }
+      /* Drawer's own sticky header — the ✕ close button was sitting under
+         the iOS status bar / notch, making it physically unclickable. Push
+         it down by the same inset+gap as the main header so the close
+         target is fully reachable. */
+      .drawer-header {
+        padding-top: calc(env(safe-area-inset-top) + 8px);
       }
     }
 
@@ -1303,7 +1315,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
   return (
     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <aside className="force-dark absolute right-0 top-0 bottom-0 w-full max-w-sm holo-bg-contained border-l border-black drawer-enter overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 h-14 border-b border-black bg-black text-white sticky top-0 z-10">
+        <div className="drawer-header flex items-center justify-between px-5 h-14 border-b border-black bg-black text-white sticky top-0 z-10">
           <span className="font-display">Menu</span>
           <button onClick={onClose} className="text-2xl leading-none p-1" aria-label="Close">✕</button>
         </div>

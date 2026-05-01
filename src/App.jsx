@@ -76,6 +76,13 @@ const GlobalStyles = () => (
     /* Wrap the entire app in a horizontal overflow guard rather than the body,
        so internal horizontal scroll containers (sunset widget tiles) still work on iOS. */
     .app-shell { overflow-x: clip; }
+    /* Reserve room at the bottom of the page for the iPhone home indicator
+       when running as an installed PWA. This goes on the shell rather than
+       the body so background colors still paint to the very edge of the
+       device — only the content shifts up. */
+    @media (display-mode: standalone) {
+      .app-shell { padding-bottom: env(safe-area-inset-bottom); }
+    }
 
     /* Headings: Verlag Black (weight 900), uppercase. */
     .font-display {
@@ -255,6 +262,36 @@ const GlobalStyles = () => (
 
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { scrollbar-width: none; }
+
+    /* PWA standalone-mode status bar handling.
+       On iOS, apple-mobile-web-app-status-bar-style: black-translucent makes
+       the status bar overlay the app rather than push content down. Without
+       respecting safe-area-inset-top, the top of our sticky header sits
+       under the clock/notch.
+       The fix is per-element rather than a body-level offset: the sticky
+       <header> still pins to top:0 (so its background paints all the way
+       up behind the status bar), but its inner row gets padded by the
+       inset so its content lives below the bar.
+       The display-mode media query scopes this to PWA installs only — in
+       a regular browser tab the status bar is a separate UI chrome we
+       don't need to dodge. iOS Safari (mobile browser) reports
+       "browser" display-mode here; only homescreen installs report
+       "standalone".
+       env(safe-area-inset-top) returns 0 on devices without a notch/cutout,
+       so this is safe to leave on universally. */
+    @media (display-mode: standalone) {
+      .header-row {
+        padding-top: env(safe-area-inset-top);
+      }
+      /* Sticky bars below the header (date strip on Wydarzenia, section
+         nav on O Festiwalu) sit at top:5rem because the header is 5rem
+         tall. When the status bar overlays, "5rem" becomes too short
+         relative to where the header now actually ends, so they
+         overlap. Add the inset to their offset too. */
+      .sticky-below-header {
+        top: calc(5rem + env(safe-area-inset-top)) !important;
+      }
+    }
 
     /* Sticky chrome — solid opaque white when bars become pinned. */
     .sticky-bar {
@@ -1196,7 +1233,7 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
 
   return (
     <header className={`sticky top-0 z-30 transition-colors duration-200 ${bgClass} ${fg}`}>
-      <div className="flex items-center gap-4 px-5 h-20 max-w-7xl mx-auto">
+      <div className="header-row flex items-center gap-4 px-5 h-20 max-w-7xl mx-auto">
         <button onClick={() => onNavigate("home")} className="flex items-center shrink-0" aria-label="Home">
           <Logo style={{ height: "36px", width: "auto" }} />
         </button>
@@ -1436,6 +1473,13 @@ const computeSunTimes = (now, lat, lng) => {
   };
 
   const H_sun = hourAngle(-0.833);
+  // Golden hour boundary: photographers' "golden" warm light spans roughly
+  // from sun altitude +6° down to -4°. -4° is also the conventional start
+  // of blue hour, which extends to civil twilight at -6°.
+  // We capture the +6° and -4° crossings to bracket morning/evening golden,
+  // and re-use the existing -6° (civil) for the blue-hour end.
+  const H_gold = hourAngle(6);
+  const H_blue = hourAngle(-4);
   const H_civ = hourAngle(-6);
   const H_nau = hourAngle(-12);
   const H_ast = hourAngle(-18);
@@ -1452,6 +1496,17 @@ const computeSunTimes = (now, lat, lng) => {
     solarMidnight,
     sunrise: at(H_sun, -1),
     sunset: at(H_sun, 1),
+    // Golden hour: morning starts at sunrise and ends when the sun reaches
+    // +6° (the upper-bound altitude); evening mirror — golden begins when
+    // the sun drops below +6° and ends at sunset.
+    morningGoldenEnd: at(H_gold, -1),
+    eveningGoldenStart: at(H_gold, 1),
+    // Blue hour: morning runs from civil twilight (-6°) to -4°; evening
+    // from -4° to civil dusk (-6°).
+    morningBlueStart: at(H_civ, -1),
+    morningBlueEnd: at(H_blue, -1),
+    eveningBlueStart: at(H_blue, 1),
+    eveningBlueEnd: at(H_civ, 1),
     civilDawn: at(H_civ, -1),
     civilDusk: at(H_civ, 1),
     nauticalDawn: at(H_nau, -1),
@@ -1547,16 +1602,26 @@ const SunsetWidget = ({ lat, lng, locationName }) => {
   }
 
   const events = [
-    { type: "Świt",     name: "astronomiczny", date: data.astroDawn },
-    { type: "Świt",     name: "nautyczny",     date: data.nauticalDawn },
-    { type: "Świt",     name: "cywilny",       date: data.civilDawn },
-    { type: "Słońce",   name: "wschód",        date: data.sunrise },
-    { type: "Słońce",   name: "górowanie",     date: data.solarNoon },
-    { type: "Słońce",   name: "zachód",        date: data.sunset },
-    { type: "Zmierzch", name: "cywilny",       date: data.civilDusk },
-    { type: "Zmierzch", name: "nautyczny",     date: data.nauticalDusk },
-    { type: "Zmierzch", name: "astronomiczny", date: data.astroDusk },
-    { type: "Noc",      name: "dołowanie",     date: data.solarMidnight },
+    { type: "Świt",      name: "astronomiczny",      date: data.astroDawn },
+    { type: "Świt",      name: "nautyczny",          date: data.nauticalDawn },
+    { type: "Świt",      name: "cywilny",            date: data.civilDawn },
+    // Blue hour begins at civil dawn (sun at -6°) and ends when sun
+    // reaches -4°. We don't show "morning blue start" as a separate tile
+    // because it's identical to civil dawn — instead we show its end.
+    { type: "Niebieska godzina", name: "koniec",     date: data.morningBlueEnd },
+    { type: "Słońce",    name: "wschód",             date: data.sunrise },
+    // Morning golden hour ends when sun reaches +6° altitude.
+    { type: "Złota godzina",     name: "koniec",     date: data.morningGoldenEnd },
+    { type: "Słońce",    name: "górowanie",          date: data.solarNoon },
+    // Evening golden hour begins when sun drops below +6°.
+    { type: "Złota godzina",     name: "początek",   date: data.eveningGoldenStart },
+    { type: "Słońce",    name: "zachód",             date: data.sunset },
+    // Evening blue hour begins when sun drops below -4°.
+    { type: "Niebieska godzina", name: "początek",   date: data.eveningBlueStart },
+    { type: "Zmierzch",  name: "cywilny",            date: data.civilDusk },
+    { type: "Zmierzch",  name: "nautyczny",          date: data.nauticalDusk },
+    { type: "Zmierzch",  name: "astronomiczny",      date: data.astroDusk },
+    { type: "Noc",       name: "dołowanie",          date: data.solarMidnight },
   ];
 
   // Index of LAST event that has already happened (current solar phase)
@@ -2888,7 +2953,7 @@ const WydarzeniaView = ({ user, onOpenStacja }) => {
       {dateKeys.length > 0 && (
         <>
           <div ref={calendarSentinelRef} aria-hidden style={{ height: "1px" }} />
-          <div className={`sticky top-20 z-20 mb-6 transition-colors ${calendarStuck ? "sticky-bar border-b border-black/10" : ""}`}>
+          <div className={`sticky top-20 sticky-below-header z-20 mb-6 transition-colors ${calendarStuck ? "sticky-bar border-b border-black/10" : ""}`}>
             <div ref={calendarRef}
               className="overflow-x-auto no-scrollbar px-5 py-2"
               style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pan-y" }}>
@@ -3773,7 +3838,7 @@ const FestiwalView = ({ user }) => {
         : (
           <>
             <div ref={navSentinelRef} aria-hidden style={{ height: "1px" }} />
-            <div ref={navRef} className={`sticky top-20 z-20 overflow-x-auto no-scrollbar transition-colors ${navStuck ? "sticky-bar border-b border-black/10" : ""}`}
+            <div ref={navRef} className={`sticky top-20 sticky-below-header z-20 overflow-x-auto no-scrollbar transition-colors ${navStuck ? "sticky-bar border-b border-black/10" : ""}`}
               style={{ touchAction: "pan-x pan-y" }}>
               <div className="flex gap-2 px-5 py-3 whitespace-nowrap">
                 {sections.map(s => {
@@ -4525,11 +4590,21 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
     }).catch(() => {});
   }, []);
 
-  const sorted = [...users].sort((a, b) => {
-    const an = displayNameOf(a).toLowerCase();
-    const bn = displayNameOf(b).toLowerCase();
-    return an.localeCompare(bn);
-  });
+  const sorted = [...users]
+    // For non-admin viewers, hide users who haven't confirmed at least one
+    // day with "yes". Admins always see everyone — they need the full list
+    // for logistics (room assignments, follow-ups). The intent is to keep
+    // the public list focused on people who are actually coming.
+    .filter(u => {
+      if (isAdmin) return true;
+      const att = u.attendance || {};
+      return Object.values(att).some(v => v === "yes");
+    })
+    .sort((a, b) => {
+      const an = displayNameOf(a).toLowerCase();
+      const bn = displayNameOf(b).toLowerCase();
+      return an.localeCompare(bn);
+    });
 
   // Render a single attendance status tile for a (user, day) pair. Filled
   // black for "yes", dashed border for "maybe", X for "no", muted dot for
@@ -4554,7 +4629,7 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
 
   return (
     <div className="pb-20">
-      <PageHeader title="Goście" subtitle={`${users.length} ${users.length === 1 ? "osoba" : "osób"}`} />
+      <PageHeader title="Goście" subtitle={`${sorted.length} ${sorted.length === 1 ? "osoba" : "osób"}`} />
       <div className="px-5 space-y-2">
         {sorted.map(u => {
           const att = u.attendance || {};

@@ -1315,7 +1315,7 @@ const Drawer = ({ open, onClose, currentView, onNavigate, user, guestListVisible
   return (
     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <aside className="force-dark absolute right-0 top-0 bottom-0 w-full max-w-sm holo-bg-contained border-l border-black drawer-enter overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="drawer-header flex items-center justify-between px-5 h-14 border-b border-black bg-black text-white sticky top-0 z-10">
+        <div className="drawer-header flex items-center justify-between px-5 py-4 border-b border-black bg-black text-white sticky top-0 z-10">
           <span className="font-display">Menu</span>
           <button onClick={onClose} className="text-2xl leading-none p-1" aria-label="Close">✕</button>
         </div>

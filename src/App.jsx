@@ -280,19 +280,22 @@ const GlobalStyles = () => (
        env(safe-area-inset-top) returns 0 on devices without a notch/cutout,
        so this is safe to leave on universally. */
     @media (display-mode: standalone) {
-      /* Top padding = the OS-reported safe-area inset (under the clock /
-         notch) + 8px breathing room. The raw inset alone made content sit
-         flush against the status bar; the small extra makes it feel
-         designed-for rather than fighting-with. Same pattern below for the
-         bottom inset. */
+      /* Add the OS-reported safe-area inset (under the clock / notch) plus
+         a small visual gap to whatever padding the element already has.
+         Crucially, this is padding-top set as an extra layer on top of
+         the existing Tailwind py-* utility — not a replacement. The
+         outer header is exactly 5rem tall in browser mode (logo + 22px
+         top + 22px bottom = 80px); in PWA mode, the safe inset adds on
+         top of those 22px, growing the header by the inset+8 amount.
+         The calendar/nav bar offset below uses the same formula so the
+         seam stays clean. */
       .header-row {
-        padding-top: calc(env(safe-area-inset-top) + 8px);
+        padding-top: calc(22px + env(safe-area-inset-top) + 8px);
       }
       /* Sticky bars below the header (date strip on Wydarzenia, section
          nav on O Festiwalu) sit at top:5rem because the header is 5rem
-         tall. When the status bar overlays, "5rem" becomes too short
-         relative to where the header now actually ends, so they
-         overlap. Match the bumped header padding so the seam stays clean. */
+         tall in browser mode. In PWA they need to drop by the same
+         amount the header grew. */
       .sticky-below-header {
         top: calc(5rem + env(safe-area-inset-top) + 8px) !important;
       }
@@ -1245,7 +1248,7 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
 
   return (
     <header className={`sticky top-0 z-30 transition-colors duration-200 ${bgClass} ${fg}`}>
-      <div className="header-row flex items-center gap-4 px-5 h-20 max-w-7xl mx-auto">
+      <div className="header-row flex items-center gap-4 px-5 py-[22px] max-w-7xl mx-auto">
         <button onClick={() => onNavigate("home")} className="flex items-center shrink-0" aria-label="Home">
           <Logo style={{ height: "36px", width: "auto" }} />
         </button>
@@ -1288,14 +1291,18 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
             </button>
           );
         })()}
-        {/* Mobile hamburger */}
+        {/* Mobile hamburger. The bar color matches the button's foreground
+            (text/border color) at rest. On hover the button's background
+            and foreground invert (buttonHover toggles bg-color → text-color
+            and vice versa), so we mirror that on the bars themselves with
+            group-hover so they don't disappear into the inverted button. */}
         <button onClick={onMenuOpen}
-          className={`lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 ml-auto transition-colors ${buttonHover}`}
+          className={`group lg:hidden border ${borderColor} w-11 h-11 flex items-center justify-center shrink-0 ml-auto transition-colors ${buttonHover}`}
           aria-label="Menu">
           <div className="space-y-1.5">
-            <div className={`w-5 h-0.5 ${barColor}`} />
-            <div className={`w-5 h-0.5 ${barColor}`} />
-            <div className={`w-5 h-0.5 ${barColor}`} />
+            <div className={`w-5 h-0.5 transition-colors ${barColor} ${lightFg ? "group-hover:bg-black" : "group-hover:bg-white"}`} />
+            <div className={`w-5 h-0.5 transition-colors ${barColor} ${lightFg ? "group-hover:bg-black" : "group-hover:bg-white"}`} />
+            <div className={`w-5 h-0.5 transition-colors ${barColor} ${lightFg ? "group-hover:bg-black" : "group-hover:bg-white"}`} />
           </div>
         </button>
       </div>

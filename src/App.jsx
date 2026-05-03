@@ -280,19 +280,16 @@ const GlobalStyles = () => (
        env(safe-area-inset-top) returns 0 on devices without a notch/cutout,
        so this is safe to leave on universally. */
     /* Header height as a CSS variable so the hero negative margin and the
-       sticky calendar/nav offset stay in lock-step. Both browser and PWA
-       modes set this variable, then the consumers reference it without
-       knowing about the inset. */
+       sticky calendar/nav offset stay in lock-step with the actual rendered
+       header. Initial value is a fallback for first paint; the Header
+       component measures its own height on mount and updates this variable
+       to the real pixel value (which differs between mobile/desktop and
+       PWA/browser due to hamburger size and safe-area inset). */
     :root { --header-height: 5rem; }
     @media (display-mode: standalone) {
       /* PWA: dodge the iOS status bar / notch.
-         The header content (logo at 36px) gets a tight padding so the nav
-         sits right under the status bar — the safe-area inset itself is
-         visually the breathing room between the clock and the logo, and
-         we add 4px so the logo doesn't touch the inset's edge. Bottom
-         padding stays at 22px from the Tailwind utility (py-[22px]).
-         Final header height = (inset + 4) + 36 + 22 = 62 + inset. */
-      :root { --header-height: calc(62px + env(safe-area-inset-top)); }
+         Padding values here are layout instructions; the JS measurement
+         picks up the resulting height and updates --header-height. */
       .header-row {
         padding-top: calc(env(safe-area-inset-top) + 4px) !important;
       }
@@ -1237,6 +1234,38 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Measure the header's real height and publish it as the
+  // `--header-height` CSS variable. The hero (negative margin), the sticky
+  // calendar/nav bars (top offset), and other anchors below the header all
+  // read this variable, so they stay aligned regardless of how tall the
+  // header actually rendered.
+  //
+  // We can't compute the height up-front because it depends on layout
+  // decisions that change between mobile/desktop and PWA/browser:
+  //   • mobile: hamburger button is 44px (h-11), making the row 88px tall
+  //   • desktop: tallest child is logo (36px) → row is 80px (5rem)
+  //   • PWA: padding-top grows by env(safe-area-inset-top)
+  // A static rem value can't capture all three. ResizeObserver does.
+  const headerRef = useRef(null);
+  useEffect(() => {
+    if (!headerRef.current) return;
+    const apply = () => {
+      const h = headerRef.current?.getBoundingClientRect().height || 80;
+      document.documentElement.style.setProperty("--header-height", `${h}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(headerRef.current);
+    // Also re-apply on orientation change / window resize as a belt &
+    // suspenders — RO should cover it but iOS Safari has historically
+    // missed orientation changes.
+    window.addEventListener("resize", apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, []);
+
   // When over a forced-dark hero, behave like dark mode visually regardless of theme.
   const overHero = forceDark && !scrolled;
   // Header always becomes black-on-white-text once scrolled, regardless of theme.
@@ -1253,7 +1282,7 @@ const Header = ({ user, guestListVisible, currentView, onNavigate, onMenuOpen, o
   const barColor = lightFg ? "bg-white" : "bg-black";
 
   return (
-    <header className={`sticky top-0 z-30 transition-colors duration-200 ${bgClass} ${fg}`}>
+    <header ref={headerRef} className={`sticky top-0 z-30 transition-colors duration-200 ${bgClass} ${fg}`}>
       <div className="header-row flex items-center gap-4 px-5 py-[22px] max-w-7xl mx-auto">
         <button onClick={() => onNavigate("home")} className="flex items-center shrink-0" aria-label="Home">
           <Logo style={{ height: "36px", width: "auto" }} />

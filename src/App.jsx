@@ -352,11 +352,23 @@ const GlobalStyles = () => (
        scales up to fill horizontally (small vertical crop is OK). On narrower
        screens, image fills height with horizontal sides cropped. +8px overhang
        on every side prevents Safari sub-pixel gradient bleed at the edges. */
+    /* Hero pulls up under the sticky header so the image extends to the
+       very top edge of the viewport. The negative margin matches the
+       header's total height. In browser mode the header is exactly 5rem
+       (80px); in PWA mode it grows by safe-area-inset-top + 8px to dodge
+       the iOS status bar, so the hero needs to grow by the same amount.
+       Without this PWA bump there's a band at the top of the home screen
+       where the header's solid background shows through above the hero
+       image. */
     .hero-wrapper {
       height: 580px;
+      margin-top: -5rem;
     }
     @media (max-width: 768px) {
       .hero-wrapper { height: 460px; }
+    }
+    @media (display-mode: standalone) {
+      .hero-wrapper { margin-top: calc(-5rem - env(safe-area-inset-top) - 8px); }
     }
     .hero-inner {
       position: absolute;
@@ -4508,24 +4520,26 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, houses = [] }
           <ImageUpload value={user.profilePicture} onChange={onAvatarChange} label="" maxSize={600} />
         </div>
 
-        {/* Read-only personal info with Edit button */}
+        {/* Personal info — read-only display of name (or pseudonym) and
+            username. The Edytuj button sits below as its own full-width
+            row inside the same bordered block, so it visually belongs to
+            the whole block (name + username + the pseudonym toggle that
+            lives inside the modal) rather than just the top row. */}
         <div className="border border-black">
-          <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-black/20">
-            <div className="min-w-0 flex-1">
-              <div className="font-mono text-xs uppercase tracking-widest opacity-60 mb-1">
-                {showsPseudonym ? "Pseudonim" : "Imię i nazwisko"}
-              </div>
-              <div className="text-base truncate">{displayName}</div>
+          <div className="px-4 py-3 border-b border-black/20">
+            <div className="font-mono text-xs uppercase tracking-widest opacity-60 mb-1">
+              {showsPseudonym ? "Pseudonim" : "Imię i nazwisko"}
             </div>
-            <button type="button" onClick={() => setEditOpen(true)}
-              className="font-display text-xs px-3 py-1.5 border border-black hover:bg-black hover:text-white shrink-0">
-              Edytuj
-            </button>
+            <div className="text-base truncate">{displayName}</div>
           </div>
-          <div className="px-4 py-3">
+          <div className="px-4 py-3 border-b border-black/20">
             <div className="font-mono text-xs uppercase tracking-widest opacity-60 mb-1">Nazwa użytkownika</div>
             <div className="text-base truncate">@{user.username}</div>
           </div>
+          <button type="button" onClick={() => setEditOpen(true)}
+            className="w-full font-display text-sm px-4 py-3 hover:bg-black hover:text-white transition-colors text-left">
+            Edytuj dane
+          </button>
         </div>
 
         {/* Password change → modal */}
@@ -5968,14 +5982,12 @@ export default function App() {
           currentView={view} onNavigate={navigate}
           onMenuOpen={() => setDrawerOpen(true)} onLogout={onLogout}
           forceDark={view === "home"} />
-        {/* Hero — only on home. Full document width (avoids 100vw/scrollbar issues on
-            iOS Safari). Pulled up under the 80px sticky header with -mt-20.
-            Aspect-preserving display: image is rendered at its natural aspect ratio,
-            cropped horizontally on narrow screens. Height is responsive. */}
+        {/* Hero — only on home. Full document width (avoids 100vw/scrollbar
+            issues on iOS Safari). The negative margin is on the .hero-wrapper
+            class itself so we can adjust it in PWA mode (where the header is
+            taller). */}
         {view === "home" && (
-          <div
-            className="relative -mt-20 w-full overflow-hidden hero-wrapper"
-          >
+          <div className="relative w-full overflow-hidden hero-wrapper">
             <div className="hero-inner">
               <img
                 src="/cb26_hero.svg"

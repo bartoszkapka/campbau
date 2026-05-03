@@ -280,29 +280,22 @@ const GlobalStyles = () => (
        env(safe-area-inset-top) returns 0 on devices without a notch/cutout,
        so this is safe to leave on universally. */
     @media (display-mode: standalone) {
-      /* Add the OS-reported safe-area inset (under the clock / notch) plus
-         a small visual gap to whatever padding the element already has.
-         Crucially, this is padding-top set as an extra layer on top of
-         the existing Tailwind py-* utility — not a replacement. The
-         outer header is exactly 5rem tall in browser mode (logo + 22px
-         top + 22px bottom = 80px); in PWA mode, the safe inset adds on
-         top of those 22px, growing the header by the inset+8 amount.
-         The calendar/nav bar offset below uses the same formula so the
-         seam stays clean. */
+      /* PWA: dodge the iOS status bar / notch.
+         The header's inner row has a default padding-top of 22px (from
+         the py-[22px] Tailwind utility). In PWA mode we add the
+         OS-reported safe-area inset on top of that 22px. No additional
+         buffer — the 22px we already have is enough breathing room
+         between the status bar and the nav content; adding more pushed
+         the nav too low.
+         The total header height grows by exactly env(safe-area-inset-top),
+         so the hero's negative margin and the calendar/nav bar's top
+         offset use the same value to stay aligned. */
       .header-row {
-        padding-top: calc(22px + env(safe-area-inset-top) + 8px);
+        padding-top: calc(22px + env(safe-area-inset-top));
       }
-      /* Sticky bars below the header (date strip on Wydarzenia, section
-         nav on O Festiwalu) sit at top:5rem because the header is 5rem
-         tall in browser mode. In PWA they need to drop by the same
-         amount the header grew. */
       .sticky-below-header {
-        top: calc(5rem + env(safe-area-inset-top) + 8px) !important;
+        top: calc(5rem + env(safe-area-inset-top)) !important;
       }
-      /* Drawer's own sticky header — the ✕ close button was sitting under
-         the iOS status bar / notch, making it physically unclickable. Push
-         it down by the same inset+gap as the main header so the close
-         target is fully reachable. */
       .drawer-header {
         padding-top: calc(env(safe-area-inset-top) + 8px);
       }
@@ -368,7 +361,7 @@ const GlobalStyles = () => (
       .hero-wrapper { height: 460px; }
     }
     @media (display-mode: standalone) {
-      .hero-wrapper { margin-top: calc(-5rem - env(safe-area-inset-top) - 8px); }
+      .hero-wrapper { margin-top: calc(-5rem - env(safe-area-inset-top)); }
     }
     .hero-inner {
       position: absolute;

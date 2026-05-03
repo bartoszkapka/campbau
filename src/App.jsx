@@ -279,26 +279,43 @@ const GlobalStyles = () => (
        "standalone".
        env(safe-area-inset-top) returns 0 on devices without a notch/cutout,
        so this is safe to leave on universally. */
+    /* Header height as a CSS variable so the hero negative margin and the
+       sticky calendar/nav offset stay in lock-step. Both browser and PWA
+       modes set this variable, then the consumers reference it without
+       knowing about the inset. */
+    :root { --header-height: 5rem; }
     @media (display-mode: standalone) {
       /* PWA: dodge the iOS status bar / notch.
-         The header's inner row has a default padding-top of 22px (from
-         the py-[22px] Tailwind utility). In PWA mode we add the
-         OS-reported safe-area inset on top of that 22px. No additional
-         buffer — the 22px we already have is enough breathing room
-         between the status bar and the nav content; adding more pushed
-         the nav too low.
-         The total header height grows by exactly env(safe-area-inset-top),
-         so the hero's negative margin and the calendar/nav bar's top
-         offset use the same value to stay aligned. */
+         The header content (logo at 36px) gets a tight padding so the nav
+         sits right under the status bar — the safe-area inset itself is
+         visually the breathing room between the clock and the logo, and
+         we add 4px so the logo doesn't touch the inset's edge. Bottom
+         padding stays at 22px from the Tailwind utility (py-[22px]).
+         Final header height = (inset + 4) + 36 + 22 = 62 + inset. */
+      :root { --header-height: calc(62px + env(safe-area-inset-top)); }
       .header-row {
-        padding-top: calc(22px + env(safe-area-inset-top));
-      }
-      .sticky-below-header {
-        top: calc(5rem + env(safe-area-inset-top)) !important;
+        padding-top: calc(env(safe-area-inset-top) + 4px) !important;
       }
       .drawer-header {
         padding-top: calc(env(safe-area-inset-top) + 8px);
       }
+    }
+    .sticky-below-header {
+      top: var(--header-height) !important;
+    }
+    .hero-wrapper {
+      /* Default height; mobile override below.
+         The negative margin pulls the hero up under the sticky header
+         (which is the next sibling in the App tree). The 1px extra absorbs
+         sub-pixel rounding when --header-height converts from rem→px or
+         from calc(...env()) — without it, iOS Safari leaves a thin band
+         of body bg between the header bottom and the image top. Hero
+         z-index is below the header's z-30, so the overlap is invisible. */
+      height: 580px;
+      margin-top: calc(0px - var(--header-height) - 1px);
+    }
+    @media (max-width: 768px) {
+      .hero-wrapper { height: 460px; }
     }
 
     /* Sticky chrome — solid opaque white when bars become pinned. */
@@ -345,24 +362,8 @@ const GlobalStyles = () => (
        scales up to fill horizontally (small vertical crop is OK). On narrower
        screens, image fills height with horizontal sides cropped. +8px overhang
        on every side prevents Safari sub-pixel gradient bleed at the edges. */
-    /* Hero pulls up under the sticky header so the image extends to the
-       very top edge of the viewport. The negative margin matches the
-       header's total height. In browser mode the header is exactly 5rem
-       (80px); in PWA mode it grows by safe-area-inset-top + 8px to dodge
-       the iOS status bar, so the hero needs to grow by the same amount.
-       Without this PWA bump there's a band at the top of the home screen
-       where the header's solid background shows through above the hero
-       image. */
-    .hero-wrapper {
-      height: 580px;
-      margin-top: -5rem;
-    }
-    @media (max-width: 768px) {
-      .hero-wrapper { height: 460px; }
-    }
-    @media (display-mode: standalone) {
-      .hero-wrapper { margin-top: calc(-5rem - env(safe-area-inset-top)); }
-    }
+    /* Hero inner — image positioning. The wrapper above sets height +
+       negative margin; here we configure the actual <img>. */
     .hero-inner {
       position: absolute;
       inset: 0;
@@ -5976,9 +5977,9 @@ export default function App() {
           onMenuOpen={() => setDrawerOpen(true)} onLogout={onLogout}
           forceDark={view === "home"} />
         {/* Hero — only on home. Full document width (avoids 100vw/scrollbar
-            issues on iOS Safari). The negative margin is on the .hero-wrapper
-            class itself so we can adjust it in PWA mode (where the header is
-            taller). */}
+            issues on iOS Safari). Pulled up under the sticky header via the
+            .hero-wrapper CSS rule (negative margin-top matching header
+            height). */}
         {view === "home" && (
           <div className="relative w-full overflow-hidden hero-wrapper">
             <div className="hero-inner">

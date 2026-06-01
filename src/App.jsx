@@ -566,6 +566,22 @@ const resolveRoom = (user, houses) => {
   return { houseName: house.name, roomName: room.name };
 };
 
+// Attendance helpers used across the app.
+//   • hasYes:    at least one day marked "yes" — counts as a confirmed guest
+//   • mayCome:   at least one day marked "yes" OR "maybe" — counts as
+//                potentially attending (for add-to-stacja/picker UX)
+// Both treat missing/no values as "not attending". When the attendance map
+// isn't populated yet (new users who haven't toggled anything), they return
+// false — which is the safe default for filtering.
+const hasYesAttendance = (u) => {
+  const att = u?.attendance || {};
+  return Object.values(att).some(v => v === "yes");
+};
+const mayAttend = (u) => {
+  const att = u?.attendance || {};
+  return Object.values(att).some(v => v === "yes" || v === "maybe");
+};
+
 // Detects when a sticky-positioned element is "stuck" to the top of the viewport.
 // Returns [stuck, setRef]. Use setRef as the `ref` prop on a 1px sentinel placed
 // just before the sticky element. The callback ref ensures the observer attaches
@@ -2709,7 +2725,16 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
   };
 
   const owners = item.owners.map(id => users.find(u => u.id === id)).filter(Boolean);
-  const availableUsers = users.filter(u => !item.owners.includes(u.id));
+  // People the current user can add as co-owners. Two filters:
+  //  1. Not already an owner of this stacja.
+  //  2. Has confirmed at least one day of attendance as "yes" or "maybe".
+  //     Adding people who said "no" (or who haven't replied yet) creates
+  //     ghost owners on a stacja they won't show up to. Admins also pass
+  //     through this filter — if you really want to invite someone who
+  //     hasn't confirmed, ask them to mark "maybe" first.
+  const availableUsers = users.filter(u =>
+    !item.owners.includes(u.id) && mayAttend(u)
+  );
 
   // Date display
   const hasDate = item.hasDate || !!item.date;
@@ -4619,11 +4644,16 @@ const ProfileView = ({ user, onUpdate, animated, onToggleAnimated, houses = [] }
 // ============================================================
 // GOŚCIE (GUEST LIST) VIEW
 // ============================================================
+// eslint-disable-next-line no-unused-vars
 const GoscieView = ({ user, users, attendanceVisible }) => {
   const isAdmin = user.role === "admin";
-  // Admins always see attendance; regular users see it when admin has opted
-  // to share. Either way the data lives on each user record (read-only here).
-  const canSeeAttendance = isAdmin || !!attendanceVisible;
+  // Attendance details (day grid + summary tags) are now visible to anyone
+  // who can see the Goście page at all. The `attendanceVisible` prop is
+  // kept in the signature for backwards compatibility but no longer used —
+  // when the guest list is shared with non-admins, the day grid comes
+  // along for the ride. (Toggle still controlled by admin via the
+  // guestListVisible setting one level up.)
+  const canSeeAttendance = true; // kept for clarity in JSX conditionals
 
   // Festival days for the attendance grid columns. Loaded from the miejsce
   // record once on mount; stays empty until that resolves.
@@ -4647,14 +4677,14 @@ const GoscieView = ({ user, users, attendanceVisible }) => {
   }, []);
 
   const sorted = [...users]
-    // For non-admin viewers, hide users who haven't confirmed at least one
-    // day with "yes". Admins always see everyone — they need the full list
-    // for logistics (room assignments, follow-ups). The intent is to keep
-    // the public list focused on people who are actually coming.
+    // For non-admin viewers, show users who have committed to at least one
+    // day as either "yes" OR "maybe" — "maybe" people are still potentially
+    // attending and worth seeing in the list. Admins see everyone for
+    // logistics. People with no attendance set, or who have only marked
+    // "no", stay hidden from the public list.
     .filter(u => {
       if (isAdmin) return true;
-      const att = u.attendance || {};
-      return Object.values(att).some(v => v === "yes");
+      return mayAttend(u);
     })
     .sort((a, b) => {
       const an = displayNameOf(a).toLowerCase();

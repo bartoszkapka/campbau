@@ -1225,6 +1225,7 @@ const NAV_ITEMS = [
   { id: "home", label: "Start", icon: "🚀" },
   { id: "wydarzenia", label: "Wydarzenia", icon: "📅" },
   { id: "stacje", label: "Stacje kosmiczne", icon: "🛸" },
+  { id: "gry", label: "Gry", icon: "🎲" },
   { id: "festiwal", label: "O Festiwalu", icon: "🌌" },
   { id: "miejsce", label: "Gdzie i kiedy", icon: "📍" },
   { id: "profile", label: "Profil", icon: "👤", drawerFooter: true },
@@ -1484,6 +1485,7 @@ const HOME_TILES = [
   { id: "home", icon: "🚀", title: "Start", desc: "Strona główna", hideFromHomeRail: true },
   { id: "wydarzenia", icon: "📅", title: "Wydarzenia", desc: "Plan festiwalu chronologicznie" },
   { id: "stacje", icon: "🛸", title: "Stacje kosmiczne", desc: "Aktywności uczestników" },
+  { id: "gry", icon: "🎲", title: "Gry", desc: "Linki do gier i zabaw" },
   { id: "festiwal", icon: "🌌", title: "O Festiwalu", desc: "Koncept, zasady, FAQ" },
   { id: "miejsce", icon: "📍", title: "Gdzie i kiedy", desc: "Lokalizacja, dojazd, kontakt" },
   { id: "profile", icon: "👤", title: "Profil", desc: "Twoje konto i zdjęcie" },
@@ -2837,6 +2839,225 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
           )}
       </Modal>
     </div>
+  );
+};
+
+// ============================================================
+// GRY VIEW
+// ============================================================
+// Admin-curated list of external games/activities. Each record:
+//   { id, emoji, name, description, url, order }
+//
+// Users see a card per game with a button that opens the external link in
+// a new tab. Admins additionally see create/edit/delete/reorder controls.
+// Records persist as `gra:<id>`; `order` is a small integer used to keep
+// stable ordering (lower = earlier). New records append; reorder arrows
+// shift neighbors.
+const GryView = ({ user }) => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const isAdmin = user.role === "admin";
+
+  const load = async () => {
+    setLoading(true);
+    const all = await storage.getAll("gra:");
+    // Sort by `order` ascending; fall back to name when order is missing
+    // or equal (stable display before admin sets explicit ordering).
+    all.sort((a, b) => {
+      const ao = typeof a.order === "number" ? a.order : 1e9;
+      const bo = typeof b.order === "number" ? b.order : 1e9;
+      if (ao !== bo) return ao - bo;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+    setItems(all);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+  useStorageRefresh(["gra:"], load);
+
+  const save = async (data) => {
+    // Adding a new game: assign the next order slot so it lands at the
+    // bottom of the list. Editing keeps the existing order.
+    if (editing) {
+      const next = { ...editing, ...data };
+      const prev = items;
+      setItems(items.map(g => g.id === editing.id ? next : g));
+      try {
+        await storage.set("gra:" + editing.id, next);
+      } catch (err) {
+        setItems(prev);
+        throw err;
+      }
+    } else {
+      const id = uid();
+      const maxOrder = items.reduce((m, g) => Math.max(m, typeof g.order === "number" ? g.order : 0), 0);
+      const next = { id, ...data, order: maxOrder + 1 };
+      setItems([...items, next]);
+      try {
+        await storage.set("gra:" + id, next);
+      } catch (err) {
+        setItems(items);
+        throw err;
+      }
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Usunąć tę grę?")) return;
+    const prev = items;
+    setItems(items.filter(g => g.id !== id));
+    try {
+      await storage.delete("gra:" + id);
+    } catch (err) {
+      setItems(prev);
+      throw err;
+    }
+  };
+
+  // Reorder by swapping order values with the neighbor. dir: -1 up, +1 down.
+  const reorder = async (id, dir) => {
+    const idx = items.findIndex(g => g.id === id);
+    if (idx < 0) return;
+    const neighborIdx = idx + dir;
+    if (neighborIdx < 0 || neighborIdx >= items.length) return;
+    const a = items[idx];
+    const b = items[neighborIdx];
+    const aOrder = typeof a.order === "number" ? a.order : idx;
+    const bOrder = typeof b.order === "number" ? b.order : neighborIdx;
+    const updatedA = { ...a, order: bOrder };
+    const updatedB = { ...b, order: aOrder };
+    const next = [...items];
+    next[idx] = updatedA;
+    next[neighborIdx] = updatedB;
+    next.sort((x, y) => (x.order || 0) - (y.order || 0));
+    const prev = items;
+    setItems(next);
+    try {
+      await Promise.all([
+        storage.set("gra:" + a.id, updatedA),
+        storage.set("gra:" + b.id, updatedB),
+      ]);
+    } catch (err) {
+      setItems(prev);
+      throw err;
+    }
+  };
+
+  // Open URL in a new tab. We deliberately use noopener noreferrer so the
+  // target site can't reach back into our window context.
+  const openUrl = (url) => {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div className="pb-20">
+      <PageHeader title="Gry"
+        subtitle={`${items.length} ${items.length === 1 ? "gra" : (items.length >= 2 && items.length <= 4 ? "gry" : "gier")}`}
+        action={isAdmin && <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>+ Dodaj</Button>} />
+
+      {loading ? (
+        <div className="px-5"><EmptyState message="Ładowanie..." /></div>
+      ) : items.length === 0 ? (
+        <div className="px-5">
+          <EmptyState message={isAdmin ? "Brak gier. Dodaj pierwszą." : "Brak gier"} />
+        </div>
+      ) : (
+        <div className="px-5 space-y-3">
+          {items.map((g, idx) => (
+            <Card key={g.id} className="p-4">
+              <div className="flex items-start gap-4">
+                {/* Emoji as a chunky leading tile so the list scans like
+                    the rest of the app (Festiwal sections, transports). */}
+                <div className="w-14 h-14 bg-black text-white flex items-center justify-center shrink-0">
+                  <span className="text-3xl leading-none emoji-mono">{g.emoji || "🎲"}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-display text-xl uppercase leading-tight break-words">{g.name}</h3>
+                  {g.description && (
+                    <p className="text-base mt-1 break-words">{g.description}</p>
+                  )}
+                  {g.url && (
+                    <div className="mt-3">
+                      <Button size="sm" onClick={() => openUrl(g.url)}>Otwórz ↗</Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Admin controls: edit/delete + reorder arrows. Bottom-aligned
+                  so the user-facing card content reads cleanly above. */}
+              {isAdmin && (
+                <div className="flex items-center gap-1 mt-4 pt-3 border-t border-black/20">
+                  <button onClick={() => reorder(g.id, -1)} disabled={idx === 0}
+                    className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↑</button>
+                  <button onClick={() => reorder(g.id, 1)} disabled={idx === items.length - 1}
+                    className="font-mono text-xs border border-black w-8 h-8 disabled:opacity-30">↓</button>
+                  <div className="flex-1" />
+                  <Button variant="outline" size="sm" onClick={() => { setEditing(g); setFormOpen(true); }}>Edytuj</Button>
+                  <Button variant="outline" size="sm" onClick={() => remove(g.id)}>Usuń</Button>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <GraFormModal open={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSave={save} editing={editing} />
+    </div>
+  );
+};
+
+const GraFormModal = ({ open, onClose, onSave, editing }) => {
+  const [form, setForm] = useState({ emoji: "🎲", name: "", description: "", url: "" });
+  useEffect(() => {
+    if (open) {
+      setForm(editing ? {
+        emoji: editing.emoji || "🎲",
+        name: editing.name || "",
+        description: editing.description || "",
+        url: editing.url || "",
+      } : { emoji: "🎲", name: "", description: "", url: "" });
+    }
+  }, [open, editing]);
+  const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const submit = (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    // Light URL normalization: if the user pasted something without a
+    // scheme (e.g. "example.com"), prepend https://. Empty stays empty —
+    // a game without a link just won't render the Otwórz button.
+    let url = (form.url || "").trim();
+    if (url && !/^https?:\/\//i.test(url) && !url.startsWith("/")) {
+      url = "https://" + url;
+    }
+    onSave({
+      emoji: form.emoji || "🎲",
+      name: form.name.trim(),
+      description: form.description.trim(),
+      url,
+    });
+  };
+  return (
+    <Modal open={open} onClose={onClose} title={editing ? "Edytuj grę" : "Dodaj grę"}>
+      <form onSubmit={submit} className="space-y-4">
+        <Input label="Emoji" value={form.emoji}
+          onChange={e => update("emoji", truncateGraphemes(e.target.value, 1))} maxLength={8} />
+        <Input label="Nazwa" value={form.name} onChange={e => update("name", e.target.value)} required />
+        <Textarea label="Opis" value={form.description} onChange={e => update("description", e.target.value)} rows={4} />
+        <Input label="Link" placeholder="https://example.com" value={form.url}
+          onChange={e => update("url", e.target.value)} type="url" />
+        <div className="flex gap-3 pt-2">
+          <Button type="submit" className="flex-1">Zapisz</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Anuluj</Button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 
@@ -5389,6 +5610,7 @@ export default function App() {
     home: "/",
     wydarzenia: "/wydarzenia",
     stacje: "/stacje",
+    gry: "/gry",
     festiwal: "/festiwal",
     miejsce: "/miejsce",
     profile: "/profil",
@@ -5555,7 +5777,7 @@ export default function App() {
 
     // The set of prefixes the rest of the app reads via getAll/get. When we
     // revalidate one, any open view watching for storage:refresh re-renders.
-    const prefixes = ["user:", "wydarzenie:", "stacja:", "fsection:", "house:"];
+    const prefixes = ["user:", "wydarzenie:", "stacja:", "fsection:", "house:", "gra:"];
     // Detect whether the user is actively interacting. If so, we postpone
     // any non-essential refresh — text selection, focused inputs, and the
     // file-upload-in-flight all break when the parent re-renders mid-action.
@@ -6068,6 +6290,7 @@ export default function App() {
               <StacjeView key={stacjeRefreshKey} user={user} users={users} onOpenDetail={openStacjaDetail} listVisible={stacjeListVisible} />
             } />
             <Route path="/stacje/:id" element={<StacjaDetailRoute />} />
+            <Route path="/gry" element={<GryView user={user} />} />
             <Route path="/festiwal" element={<FestiwalView user={user} />} />
             <Route path="/miejsce" element={<MiejsceView user={user} onUpdate={onUpdateUser} />} />
             <Route path="/profil" element={

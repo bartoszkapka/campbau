@@ -2650,6 +2650,12 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh, onCastVote
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [coOwnerOpen, setCoOwnerOpen] = useState(false);
+  // Vote-in-flight state. Must live up here above the early returns —
+  // React requires hook order to be stable across renders, and putting
+  // useState after a conditional `return` made the hook count jump
+  // between the loading frame and the loaded frame, crashing with a
+  // "Rendered more hooks than during the previous render" error.
+  const [voteBusy, setVoteBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -2675,15 +2681,13 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh, onCastVote
   // Admins not in the owners list see the mystery view too.
   const isMystery = item.visibility === "hidden" && !isOwner;
 
-  // Voting state. Votes are stored on the current user's record as an array
-  // of stacja ids (up to 5). Owners of this stacja can't vote for it; the
-  // global cap also blocks once the user is at 5 votes (unless they're
-  // unvoting this same stacja).
+  // Voting derived state. The useState that backs `voteBusy` lives above
+  // the early returns; everything else here is a plain computation that
+  // depends on `item` and `user`.
   const myVotes = Array.isArray(user.votes) ? user.votes : [];
   const hasVoted = myVotes.includes(stacjaId);
   const votesLeft = 5 - myVotes.length;
   const canVoteHere = !isOwner;
-  const [voteBusy, setVoteBusy] = useState(false);
   const onVoteClick = async () => {
     if (voteBusy) return;
     setVoteBusy(true);

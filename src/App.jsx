@@ -2645,7 +2645,7 @@ const StacjaFormModal = ({ open, onClose, onSave, editing, isAdmin }) => {
 // ============================================================
 // STACJA DETAIL VIEW
 // ============================================================
-const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
+const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh, onCastVote, onRemoveVote }) => {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
@@ -2674,6 +2674,26 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
   // Hidden stacje are a real secret — only the owners can see content.
   // Admins not in the owners list see the mystery view too.
   const isMystery = item.visibility === "hidden" && !isOwner;
+
+  // Voting state. Votes are stored on the current user's record as an array
+  // of stacja ids (up to 5). Owners of this stacja can't vote for it; the
+  // global cap also blocks once the user is at 5 votes (unless they're
+  // unvoting this same stacja).
+  const myVotes = Array.isArray(user.votes) ? user.votes : [];
+  const hasVoted = myVotes.includes(stacjaId);
+  const votesLeft = 5 - myVotes.length;
+  const canVoteHere = !isOwner;
+  const [voteBusy, setVoteBusy] = useState(false);
+  const onVoteClick = async () => {
+    if (voteBusy) return;
+    setVoteBusy(true);
+    try {
+      if (hasVoted) await onRemoveVote?.(stacjaId);
+      else await onCastVote?.(stacjaId);
+    } finally {
+      setVoteBusy(false);
+    }
+  };
 
   // Mystery early return — no details exposed
   if (isMystery) {
@@ -2738,6 +2758,13 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
     !item.owners.includes(u.id) && mayAttend(u)
   );
 
+  // Voters for this stacja — computed by scanning the users list for
+  // anyone whose votes array contains this stacja's id. Only shown to
+  // admins (others must not see who voted, per spec).
+  const voters = isAdmin
+    ? users.filter(u => Array.isArray(u.votes) && u.votes.includes(stacjaId))
+    : [];
+
   // Date display
   const hasDate = item.hasDate || !!item.date;
   let dateLine = null;
@@ -2780,6 +2807,38 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
               </div>
             ) : null}
             {item.description && <div className="prose-simple mb-6">{renderRichText(item.description)}</div>}
+
+            {/* Vote widget — visible to everyone who can see the detail page,
+                except owners (you can't vote for your own stacja). Behaves
+                as a toggle: tap once to vote, tap again to unvote and free
+                up your slot. The "X/5" indicator gives the user context for
+                the global cap without revealing anyone else's vote counts. */}
+            {canVoteHere && (
+              <div className="border border-black p-4 mb-6">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="font-display font-bold uppercase">Głosuj na tę stację</div>
+                    <div className="font-mono text-xs uppercase tracking-widest opacity-70 mt-1">
+                      Twoje głosy: <span className="opacity-100">{myVotes.length} / 5</span>
+                    </div>
+                  </div>
+                  {hasVoted ? (
+                    <Button variant="outline" onClick={onVoteClick} disabled={voteBusy}>
+                      {voteBusy ? "..." : "Cofnij głos"}
+                    </Button>
+                  ) : votesLeft > 0 ? (
+                    <Button onClick={onVoteClick} disabled={voteBusy}>
+                      {voteBusy ? "..." : "Oddaj głos"}
+                    </Button>
+                  ) : (
+                    <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-right">
+                      Wykorzystałeś wszystkie głosy
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {canEdit && (
               <div className="flex gap-3 mt-6">
                 <Button variant="outline" onClick={() => setEditOpen(true)} className="flex-1">Edytuj</Button>
@@ -2812,6 +2871,39 @@ const StacjaDetailView = ({ stacjaId, user, users, onBack, onRefresh }) => {
                 </div>
               ))}
             </div>
+
+            {/* Admin-only voters list. Shows everyone who cast a vote for
+                this stacja. Non-admins must not see this — the rest of the
+                voting UI hides counts and voter identities entirely from
+                them. */}
+            {isAdmin && (
+              <div className="mt-6 pt-5 border-t border-black">
+                <h2 className="font-display font-bold uppercase mb-3">
+                  Głosy ({voters.length})
+                </h2>
+                {voters.length === 0 ? (
+                  <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-center py-3 border border-dashed border-black">
+                    Brak głosów
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {voters.map(v => (
+                      <div key={v.id} className="flex items-center gap-3 border border-black p-2">
+                        <div className="w-10 h-10 border border-black overflow-hidden shrink-0 bg-white">
+                          {v.profilePicture
+                            ? <img src={v.profilePicture} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center font-display font-bold">{displayInitialOf(v)}</div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-display font-bold truncate">{displayNameOf(v)}</div>
+                          <div className="font-mono text-xs uppercase opacity-60">@{v.username}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </aside>
         </div>
       </div>
@@ -5149,6 +5241,125 @@ const HomeContentEditor = ({ content = { mottos: [], description: "", noStacjePl
   );
 };
 
+// VotingRankingCard — admin-only ranking of stacje by votes received.
+// Self-contained: loads the stacje list itself, joins with users (which the
+// admin view already has) to count votes per stacja id, and renders the
+// sorted ranking with an expandable voter list per row.
+//
+// Non-admins must never see this — it's only rendered inside AdminView, but
+// for defense in depth we also bail if a non-admin user somehow renders it.
+const VotingRankingCard = ({ users = [] }) => {
+  const [stacje, setStacje] = useState([]);
+  const [loading, setLoading] = useState(true);
+  // Toggle per-stacja drill-in for the voters list. Stacja id → bool.
+  const [expanded, setExpanded] = useState({});
+
+  const load = async () => {
+    setLoading(true);
+    const all = await storage.getAll("stacja:");
+    setStacje(all);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+  // Re-load when stacja records change upstream (e.g. another admin
+  // creates or deletes one).
+  useStorageRefresh(["stacja:"], load);
+
+  // Tally votes per stacja id by scanning users. O(users × maxVotes) where
+  // maxVotes ≤ 5 — trivial for any realistic festival size.
+  const votesByStacja = {};
+  const votersByStacja = {};
+  for (const u of users) {
+    const v = Array.isArray(u.votes) ? u.votes : [];
+    for (const sid of v) {
+      votesByStacja[sid] = (votesByStacja[sid] || 0) + 1;
+      if (!votersByStacja[sid]) votersByStacja[sid] = [];
+      votersByStacja[sid].push(u);
+    }
+  }
+
+  // Build the ranking: every stacja with at least one vote, sorted by
+  // count desc, then by title for stable tiebreaks. Stacje with zero
+  // votes are skipped — they'd dominate the bottom and add noise.
+  const ranking = stacje
+    .map(s => ({ stacja: s, count: votesByStacja[s.id] || 0 }))
+    .filter(r => r.count > 0)
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return (a.stacja.title || "").localeCompare(b.stacja.title || "");
+    });
+
+  const totalCast = Object.values(votesByStacja).reduce((sum, n) => sum + n, 0);
+  const usersWithVotes = users.filter(u => Array.isArray(u.votes) && u.votes.length > 0).length;
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div>
+        <div className="font-display font-bold uppercase mb-1">Ranking głosowania</div>
+        <div className="font-mono text-xs uppercase tracking-widest opacity-70">
+          {loading
+            ? "Ładowanie..."
+            : `Oddanych głosów: ${totalCast} · głosujących: ${usersWithVotes}`}
+        </div>
+      </div>
+
+      {!loading && ranking.length === 0 ? (
+        <div className="font-mono text-xs uppercase tracking-widest opacity-60 text-center py-4 border border-dashed border-black">
+          Jeszcze nikt nie zagłosował
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {ranking.map((r, idx) => {
+            const voters = votersByStacja[r.stacja.id] || [];
+            const isOpen = !!expanded[r.stacja.id];
+            return (
+              <div key={r.stacja.id} className="border border-black">
+                <button type="button"
+                  onClick={() => setExpanded(prev => ({ ...prev, [r.stacja.id]: !prev[r.stacja.id] }))}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-black hover:text-white transition-colors">
+                  {/* Position number — keeps the ranking visually scannable.
+                      Top 3 get filled black squares; rest get a plain
+                      outlined number. Doesn't influence sort, just decoration. */}
+                  <div className={`w-8 h-8 flex items-center justify-center font-display font-bold shrink-0 ${idx < 3 ? "bg-black text-white" : "border border-black"}`}>
+                    {idx + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-bold truncate">
+                      {r.stacja.icon && <span className="mr-2 emoji-mono">{r.stacja.icon}</span>}
+                      {r.stacja.title}
+                    </div>
+                    <div className="font-mono text-xs uppercase tracking-widest opacity-70">
+                      {r.count} {r.count === 1 ? "głos" : (r.count >= 2 && r.count <= 4 ? "głosy" : "głosów")}
+                    </div>
+                  </div>
+                  <div className="font-mono text-xs shrink-0">{isOpen ? "−" : "+"}</div>
+                </button>
+                {isOpen && voters.length > 0 && (
+                  <div className="p-3 border-t border-black/30 space-y-2">
+                    {voters.map(v => (
+                      <div key={v.id} className="flex items-center gap-3">
+                        <div className="w-8 h-8 border border-black overflow-hidden shrink-0 bg-white">
+                          {v.profilePicture
+                            ? <img src={v.profilePicture} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center font-display text-sm font-bold">{displayInitialOf(v)}</div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-display text-sm truncate">{displayNameOf(v)}</div>
+                          <div className="font-mono text-xs uppercase opacity-60">@{v.username}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+};
+
 // HousesEditor — admin manages a list of houses, each with a list of rooms.
 // Houses are stored as separate records (`house:<id>`); rooms live inline
 // inside their parent house and don't have their own storage key.
@@ -5405,6 +5616,7 @@ const AdminView = ({ user, users, onReloadUsers, guestListVisible, onToggleGuest
         <HousesEditor houses={houses}
           onCreateHouse={onCreateHouse} onRenameHouse={onRenameHouse} onDeleteHouse={onDeleteHouse}
           onAddRoom={onAddRoom} onRenameRoom={onRenameRoom} onDeleteRoom={onDeleteRoom} />
+        <VotingRankingCard users={users} />
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-bold uppercase">Użytkownicy ({users.length})</h2>
@@ -6195,6 +6407,48 @@ export default function App() {
     }
   };
 
+  // Stacja voting.
+  //
+  // Each user gets 5 votes total. Votes live on the user record as an
+  // array of stacja ids (`user.votes`). Two operations:
+  //   onCastVote(stacjaId)    — append to current user's votes
+  //   onRemoveVote(stacjaId)  — strip from current user's votes
+  //
+  // Constraints enforced here as belt-and-suspenders even though the UI
+  // also guards them:
+  //   • cap at 5 votes total
+  //   • each stacja can only be voted once (set semantics via filter+spread)
+  //   • cannot vote for a stacja you own
+  //
+  // Vote state is the current user's own data, so we update via the
+  // existing onUpdateUser path — that handles optimistic local state +
+  // session storage + the user record write. No separate cache invalidation
+  // needed; admin view re-reads users on visibility/focus and picks up
+  // fresh votes there.
+  const onCastVote = async (stacjaId) => {
+    if (!user || !stacjaId) return;
+    // Owner check requires loading the stacja record. Cheap (cached).
+    const stacja = await storage.get("stacja:" + stacjaId).catch(() => null);
+    if (!stacja) return;
+    if (Array.isArray(stacja.owners) && stacja.owners.includes(user.id)) {
+      // UI shouldn't let this happen, but if it does — silently noop.
+      return;
+    }
+    const current = Array.isArray(user.votes) ? user.votes : [];
+    if (current.includes(stacjaId)) return; // already voted
+    if (current.length >= 5) return;        // out of votes
+    const next = { ...user, votes: [...current, stacjaId] };
+    await onUpdateUser(next);
+  };
+
+  const onRemoveVote = async (stacjaId) => {
+    if (!user || !stacjaId) return;
+    const current = Array.isArray(user.votes) ? user.votes : [];
+    if (!current.includes(stacjaId)) return;
+    const next = { ...user, votes: current.filter(id => id !== stacjaId) };
+    await onUpdateUser(next);
+  };
+
   const navigate = (v) => {
     const path = VIEW_TO_PATH[v] || "/";
     routerNavigate(path);
@@ -6235,7 +6489,8 @@ export default function App() {
     return (
       <StacjaDetailView stacjaId={id} user={user} users={users}
         onBack={() => routerNavigate("/stacje")}
-        onRefresh={() => setStacjeRefreshKey(k => k + 1)} />
+        onRefresh={() => setStacjeRefreshKey(k => k + 1)}
+        onCastVote={onCastVote} onRemoveVote={onRemoveVote} />
     );
   };
 

@@ -6424,25 +6424,32 @@ export default function App() {
   //   • each stacja can only be voted once (set semantics via filter+spread)
   //   • cannot vote for a stacja you own
   //
-  // Vote state is the current user's own data, so we update via the
-  // existing onUpdateUser path — that handles optimistic local state +
-  // session storage + the user record write. No separate cache invalidation
-  // needed; admin view re-reads users on visibility/focus and picks up
-  // fresh votes there.
+  // Implementation note: `onUpdateUser` only syncs in-memory state — it
+  // does NOT write to storage. Each caller is responsible for persisting
+  // the user record itself. We do that here with `storage.set` before
+  // calling `onUpdateUser`. Without this write, votes were dropped on the
+  // floor: in-memory state showed the toggle, but the user record in
+  // storage never changed, so `loadUsers()` would re-hydrate the stale
+  // copy and the admin ranking (which reads from storage via the users
+  // list) saw zero votes everywhere.
   const onCastVote = async (stacjaId) => {
     if (!user || !stacjaId) return;
-    // Owner check requires loading the stacja record. Cheap (cached).
     const stacja = await storage.get("stacja:" + stacjaId).catch(() => null);
     if (!stacja) return;
     if (Array.isArray(stacja.owners) && stacja.owners.includes(user.id)) {
-      // UI shouldn't let this happen, but if it does — silently noop.
       return;
     }
     const current = Array.isArray(user.votes) ? user.votes : [];
     if (current.includes(stacjaId)) return; // already voted
     if (current.length >= 5) return;        // out of votes
     const next = { ...user, votes: [...current, stacjaId] };
-    await onUpdateUser(next);
+    try {
+      await storage.set("user:" + next.username, next);
+      onUpdateUser(next);
+    } catch (err) {
+      console.warn("vote cast failed", err);
+      window.dispatchEvent(new Event("storage:error"));
+    }
   };
 
   const onRemoveVote = async (stacjaId) => {
@@ -6450,7 +6457,13 @@ export default function App() {
     const current = Array.isArray(user.votes) ? user.votes : [];
     if (!current.includes(stacjaId)) return;
     const next = { ...user, votes: current.filter(id => id !== stacjaId) };
-    await onUpdateUser(next);
+    try {
+      await storage.set("user:" + next.username, next);
+      onUpdateUser(next);
+    } catch (err) {
+      console.warn("vote remove failed", err);
+      window.dispatchEvent(new Event("storage:error"));
+    }
   };
 
   const navigate = (v) => {
